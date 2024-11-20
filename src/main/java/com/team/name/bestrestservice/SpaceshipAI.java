@@ -6,6 +6,11 @@ import java.util.*;
 
 public class SpaceshipAI {
 
+    // Class-level variables
+    private final int[] dx = {-1, 0, 1, 0}; // N, E, S, W
+    private final int[] dy = {0, 1, 0, -1}; // N, E, S, W
+    private final char[] directions = {'N', 'E', 'S', 'W'};
+
     public String decideMove(GameStatus gameStatus) {
         String[][] field = gameStatus.field;
 
@@ -28,13 +33,8 @@ public class SpaceshipAI {
             if (myX != -1) break;
         }
 
-        // Define movement deltas based on direction
-        int[] dx = { -1, 1, 0, 0 }; // N, S, W, E
-        int[] dy = { 0, 0, -1, 1 }; // N, S, W, E
-        char[] directions = { 'N', 'S', 'W', 'E' };
-
         // Map direction to index
-        int dirIndex = "NSWE".indexOf(myDirection);
+        int dirIndex = "NESW".indexOf(myDirection);
 
         // Check if an enemy is in firing range
         for (int distance = 1; distance <= 4; distance++) {
@@ -50,6 +50,16 @@ public class SpaceshipAI {
             }
         }
 
+        // Try to move towards the nearest enemy
+        int[] enemyTarget = findNearestEnemy(field, myX, myY);
+
+        if (enemyTarget != null) {
+            String nextMove = getNextMoveTowardsTarget(field, myX, myY, myDirection, enemyTarget[0], enemyTarget[1]);
+            if (nextMove != null) {
+                return nextMove;
+            }
+        }
+
         // Try to move towards the nearest coin
         int[] coinTarget = findNearestCoin(field, myX, myY);
 
@@ -60,7 +70,7 @@ public class SpaceshipAI {
             }
         }
 
-        // If no coins, move forward if possible
+        // Try to move forward if possible
         int forwardX = myX + dx[dirIndex];
         int forwardY = myY + dy[dirIndex];
         if (isWithinBounds(forwardX, forwardY) && isEmpty(field[forwardX][forwardY])) {
@@ -73,8 +83,8 @@ public class SpaceshipAI {
             return rotateMove;
         }
 
-        // If no possible move, stay in place (or move forward if blocked)
-        return "M"; // Attempt to move forward even if blocked
+        // If no possible move, attempt to move forward
+        return "M"; // May result in staying in place if blocked
     }
 
     private boolean isEnemy(String cell) {
@@ -97,6 +107,24 @@ public class SpaceshipAI {
         return x < 0 || x >= 13 || y < 0 || y >= 13;
     }
 
+    private int[] findNearestEnemy(String[][] field, int myX, int myY) {
+        int minDistance = Integer.MAX_VALUE;
+        int[] target = null;
+
+        for (int i = 0; i < field.length; i++) {
+            for (int j = 0; j < field[i].length; j++) {
+                if (isEnemy(field[i][j])) {
+                    int distance = Math.abs(myX - i) + Math.abs(myY - j);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        target = new int[]{i, j};
+                    }
+                }
+            }
+        }
+        return target;
+    }
+
     private int[] findNearestCoin(String[][] field, int myX, int myY) {
         int minDistance = Integer.MAX_VALUE;
         int[] target = null;
@@ -107,7 +135,7 @@ public class SpaceshipAI {
                     int distance = Math.abs(myX - i) + Math.abs(myY - j);
                     if (distance < minDistance) {
                         minDistance = distance;
-                        target = new int[] { i, j };
+                        target = new int[]{i, j};
                     }
                 }
             }
@@ -116,42 +144,39 @@ public class SpaceshipAI {
     }
 
     private String getNextMoveTowardsTarget(String[][] field, int myX, int myY, char myDirection, int targetX, int targetY) {
-        // Determine the direction to the target
+        // Determine possible directions towards the target
         int deltaX = targetX - myX;
         int deltaY = targetY - myY;
 
-        char desiredDirection;
-        if (Math.abs(deltaX) > Math.abs(deltaY)) {
-            desiredDirection = deltaX < 0 ? 'N' : 'S';
-        } else {
-            desiredDirection = deltaY < 0 ? 'W' : 'E';
-        }
+        List<Character> possibleDirections = new ArrayList<>();
+        if (deltaX < 0) possibleDirections.add('N');
+        if (deltaX > 0) possibleDirections.add('S');
+        if (deltaY > 0) possibleDirections.add('E');
+        if (deltaY < 0) possibleDirections.add('W');
 
-        if (myDirection == desiredDirection) {
-            // Try to move forward
-            int[] dx = { -1, 1, 0, 0 }; // N, S, W, E
-            int[] dy = { 0, 0, -1, 1 }; // N, S, W, E
-            int dirIndex = "NSWE".indexOf(myDirection);
-
+        // Try each possible direction
+        for (char desiredDirection : possibleDirections) {
+            int dirIndex = "NESW".indexOf(desiredDirection);
             int forwardX = myX + dx[dirIndex];
             int forwardY = myY + dy[dirIndex];
 
             if (isWithinBounds(forwardX, forwardY) && isEmpty(field[forwardX][forwardY])) {
-                return "M";
-            } else {
-                return null;
+                String rotation = getMinimalRotation(myDirection, desiredDirection);
+                if (rotation != null) {
+                    return rotation;
+                } else {
+                    // Already facing the desired direction
+                    return "M";
+                }
             }
-        } else {
-            // Determine the minimal rotation
-            String rotation = getMinimalRotation(myDirection, desiredDirection);
-            return rotation;
         }
+        return null; // No valid moves towards target
     }
 
     private String getMinimalRotation(char currentDirection, char desiredDirection) {
-        String directions = "NESW";
-        int currentIndex = directions.indexOf(currentDirection);
-        int desiredIndex = directions.indexOf(desiredDirection);
+        String directionsStr = "NESW";
+        int currentIndex = directionsStr.indexOf(currentDirection);
+        int desiredIndex = directionsStr.indexOf(desiredDirection);
 
         int diff = (desiredIndex - currentIndex + 4) % 4;
         if (diff == 1) {
@@ -159,23 +184,21 @@ public class SpaceshipAI {
         } else if (diff == 3) {
             return "L";
         } else if (diff == 2) {
-            // Do not turn around yourself; choose to rotate right
-            return "R";
+            // Only turn around if no other options are available
+            return "R"; // or "L"
         } else {
             return null; // Already facing the desired direction
         }
     }
 
     private String findRotationToMove(String[][] field, int myX, int myY, char myDirection) {
-        String directions = "NESW";
-        int currentIndex = directions.indexOf(myDirection);
+        String directionsStr = "NESW";
+        int currentIndex = directionsStr.indexOf(myDirection);
 
         for (int i = 1; i <= 3; i++) {
             int newIndex = (currentIndex + i) % 4;
-            char newDirection = directions.charAt(newIndex);
+            char newDirection = directionsStr.charAt(newIndex);
 
-            int[] dx = { -1, 0, 1, 0 }; // N, E, S, W
-            int[] dy = { 0, 1, 0, -1 }; // N, E, S, W
             int dirIndex = newIndex;
 
             int forwardX = myX + dx[dirIndex];
@@ -183,20 +206,17 @@ public class SpaceshipAI {
 
             if (isWithinBounds(forwardX, forwardY) && isEmpty(field[forwardX][forwardY])) {
                 // Decide whether to rotate left or right
-                if (i == 1) {
+                int diff = (newIndex - currentIndex + 4) % 4;
+                if (diff == 1) {
                     return "R";
-                } else if (i == 3) {
+                } else if (diff == 3) {
                     return "L";
-                } else {
-                    // i == 2, do not turn around yourself
-                    return "R";
                 }
             }
         }
         return null;
     }
 
-    // GameStatus class as provided
     public static class GameStatus {
         String[][] field = new String[13][13];
         int narrowingIn;
