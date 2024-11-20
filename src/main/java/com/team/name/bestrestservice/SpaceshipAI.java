@@ -1,7 +1,4 @@
 package com.team.name.bestrestservice;
-
-import com.team.name.bestrestservice.controller.TaskResolveController;
-
 import java.util.*;
 
 public class SpaceshipAI {
@@ -229,7 +226,7 @@ public class SpaceshipAI {
             return "L";
         } else if (diff == 2) {
             // Do not turn around unless necessary
-            return null;
+            return "R";
         } else {
             return null; // Already facing the desired direction
         }
