@@ -45,8 +45,12 @@ public class SpaceshipAI {
             return "M"; // Default move
         }
 
-        // Check for enemies in all directions within radius 4
+        // Check for enemies in all directions except behind within radius 4
         for (int i = 0; i < 4; i++) {
+            if (isOppositeDirection(dirIndex, i)) {
+                continue; // Skip the direction opposite to current direction (enemy behind)
+            }
+
             boolean enemyInRange = false;
             for (int distance = 1; distance <= 4; distance++) {
                 int newX = myX + dx[i] * distance;
@@ -67,8 +71,8 @@ public class SpaceshipAI {
             }
 
             if (enemyInRange) {
-                // Rotate towards the enemy direction
-                String rotation = getMinimalRotation(dirIndex, i);
+                // Rotate towards the enemy direction if not already facing it
+                String rotation = getMinimalRotationForEnemyRotation(dirIndex, i);
                 if (rotation != null) {
                     return rotation;
                 } else {
@@ -110,6 +114,10 @@ public class SpaceshipAI {
 
         // If no possible move, attempt to stay in place
         return "M"; // May result in staying in place if blocked
+    }
+
+    private boolean isOppositeDirection(int currentIndex, int targetIndex) {
+        return (currentIndex + 2) % 4 == targetIndex;
     }
 
     private int getDirectionIndex(String direction) {
@@ -241,6 +249,20 @@ public class SpaceshipAI {
         } else if (diff == 2) {
             // Turn around
             return "R";
+        } else {
+            return null; // Already facing the desired direction
+        }
+    }
+
+    private String getMinimalRotationForEnemyRotation(int currentIndex, int desiredIndex) {
+        int diff = (desiredIndex - currentIndex + 4) % 4;
+        if (diff == 1) {
+            return "R";
+        } else if (diff == 3) {
+            return "L";
+        } else if (diff == 2) {
+            // Turn around
+            return null;
         } else {
             return null; // Already facing the desired direction
         }
