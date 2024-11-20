@@ -7,15 +7,16 @@ import java.util.*;
 public class SpaceshipAI {
 
     // Class-level variables
-    private final int[] dx = { -1, 0, 1, 0 }; // N, E, S, W
-    private final int[] dy = { 0, 1, 0, -1 }; // N, E, S, W
-    private final char[] directions = { 'N', 'E', 'S', 'W' };
+    private final int[] dx = { -1, 0, 1, 0 }; // North, East, South, West
+    private final int[] dy = { 0, 1, 0, -1 }; // North, East, South, West
+    private final String[] directions = { "N", "E", "S", "W" };
+    private final String[] fullDirections = { "North", "East", "South", "West" };
 
     public String decideMove(GameStatus gameStatus) {
         String[][] field = gameStatus.field;
 
         int myX = -1, myY = -1;
-        char myDirection = ' ';
+        String myDirection = "";
 
         // Find our position and direction
         for (int i = 0; i < field.length; i++) {
@@ -25,7 +26,7 @@ public class SpaceshipAI {
                     myX = i;
                     myY = j;
                     if (cell.length() > 1) {
-                        myDirection = cell.charAt(1);
+                        myDirection = cell.substring(1); // Extract direction string
                     }
                     break;
                 }
@@ -34,11 +35,10 @@ public class SpaceshipAI {
         }
 
         // Map direction to index
-        int dirIndex = "NESW".indexOf(myDirection);
+        int dirIndex = getDirectionIndex(myDirection);
 
         // Check if an enemy is in firing range + 1
         boolean enemyInRangePlusOne = false;
-        int enemyDistance = -1;
         for (int distance = 1; distance <= 5; distance++) {
             int newX = myX + dx[dirIndex] * distance;
             int newY = myY + dy[dirIndex] * distance;
@@ -48,7 +48,6 @@ public class SpaceshipAI {
             }
 
             if (isEnemy(field[newX][newY])) {
-                enemyDistance = distance;
                 if (distance <= 4) {
                     // Enemy is within firing range
                     return "F"; // Fire at enemy
@@ -101,6 +100,15 @@ public class SpaceshipAI {
         return "M"; // May result in staying in place if blocked
     }
 
+    private int getDirectionIndex(String direction) {
+        for (int i = 0; i < directions.length; i++) {
+            if (direction.equals(directions[i]) || direction.equals(fullDirections[i])) {
+                return i;
+            }
+        }
+        return -1; // Direction not found
+    }
+
     private boolean isEnemy(String cell) {
         return cell.startsWith("E");
     }
@@ -139,20 +147,20 @@ public class SpaceshipAI {
         return target;
     }
 
-    private String getNextMoveTowardsTarget(String[][] field, int myX, int myY, char myDirection, int targetX, int targetY) {
+    private String getNextMoveTowardsTarget(String[][] field, int myX, int myY, String myDirection, int targetX, int targetY) {
         // Determine possible directions towards the target
         int deltaX = targetX - myX;
         int deltaY = targetY - myY;
 
-        List<Character> possibleDirections = new ArrayList<>();
-        if (deltaX < 0) possibleDirections.add('N');
-        if (deltaX > 0) possibleDirections.add('S');
-        if (deltaY > 0) possibleDirections.add('E');
-        if (deltaY < 0) possibleDirections.add('W');
+        List<String> possibleDirections = new ArrayList<>();
+        if (deltaX < 0) possibleDirections.add("N");
+        if (deltaX > 0) possibleDirections.add("S");
+        if (deltaY > 0) possibleDirections.add("E");
+        if (deltaY < 0) possibleDirections.add("W");
 
         // Try each possible direction
-        for (char desiredDirection : possibleDirections) {
-            int dirIndex = "NESW".indexOf(desiredDirection);
+        for (String desiredDirection : possibleDirections) {
+            int dirIndex = getDirectionIndex(desiredDirection);
             int forwardX = myX + dx[dirIndex];
             int forwardY = myY + dy[dirIndex];
 
@@ -169,10 +177,13 @@ public class SpaceshipAI {
         return null; // No valid moves towards target
     }
 
-    private String getMinimalRotation(char currentDirection, char desiredDirection) {
-        String directionsStr = "NESW";
-        int currentIndex = directionsStr.indexOf(currentDirection);
-        int desiredIndex = directionsStr.indexOf(desiredDirection);
+    private String getMinimalRotation(String currentDirection, String desiredDirection) {
+        int currentIndex = getDirectionIndex(currentDirection);
+        int desiredIndex = getDirectionIndex(desiredDirection);
+
+        if (currentIndex == -1 || desiredIndex == -1) {
+            return null; // Invalid direction
+        }
 
         int diff = (desiredIndex - currentIndex + 4) % 4;
         if (diff == 1) {
@@ -187,13 +198,13 @@ public class SpaceshipAI {
         }
     }
 
-    private String rotateTowardsEnemy(String[][] field, int myX, int myY, char myDirection) {
+    private String rotateTowardsEnemy(String[][] field, int myX, int myY, String myDirection) {
         // Rotate towards the direction where the enemy is located within range + 1
         for (int i = 0; i < 4; i++) {
-            char direction = directions[i];
+            String direction = directions[i];
             int dirIndex = i;
-            int enemyDistance = -1;
 
+            boolean enemyInRangePlusOne = false;
             for (int distance = 1; distance <= 5; distance++) {
                 int newX = myX + dx[dirIndex] * distance;
                 int newY = myY + dy[dirIndex] * distance;
@@ -203,13 +214,12 @@ public class SpaceshipAI {
                 }
 
                 if (isEnemy(field[newX][newY])) {
-                    enemyDistance = distance;
+                    enemyInRangePlusOne = true;
                     break;
                 }
             }
 
-            if (enemyDistance != -1 && enemyDistance <= 5) {
-                // Enemy found in this direction within range + 1
+            if (enemyInRangePlusOne) {
                 String rotation = getMinimalRotation(myDirection, direction);
                 if (rotation != null) {
                     return rotation;
@@ -227,13 +237,12 @@ public class SpaceshipAI {
         return null;
     }
 
-    private String findRotationToMove(String[][] field, int myX, int myY, char myDirection) {
-        String directionsStr = "NESW";
-        int currentIndex = directionsStr.indexOf(myDirection);
+    private String findRotationToMove(String[][] field, int myX, int myY, String myDirection) {
+        int currentIndex = getDirectionIndex(myDirection);
 
         for (int i = 1; i <= 3; i++) {
             int newIndex = (currentIndex + i) % 4;
-            char newDirection = directionsStr.charAt(newIndex);
+            String newDirection = directions[newIndex];
 
             int dirIndex = newIndex;
 
