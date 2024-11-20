@@ -15,4 +15,9 @@ public class TaskResolveController {
     public ResponseEntity<Map<String, String>> checkHealth() {
         return ResponseEntity.ok(Collections.singletonMap("status", "OK"));
     }
+
+    @GetMapping(value = "/test", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, String>> testHeroku() {
+        return ResponseEntity.ok(Collections.singletonMap("testNumber", "1"));
+    }
 }
