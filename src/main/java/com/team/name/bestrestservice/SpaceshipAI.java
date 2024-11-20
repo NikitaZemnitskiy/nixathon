@@ -45,22 +45,36 @@ public class SpaceshipAI {
             return "M"; // Default move
         }
 
-        // Check if an enemy is in firing range
-        for (int distance = 1; distance <= 4; distance++) {
-            int newX = myX + dx[dirIndex] * distance;
-            int newY = myY + dy[dirIndex] * distance;
+        // Check for enemies in all directions within radius 4
+        for (int i = 0; i < 4; i++) {
+            boolean enemyInRange = false;
+            for (int distance = 1; distance <= 4; distance++) {
+                int newX = myX + dx[i] * distance;
+                int newY = myY + dy[i] * distance;
 
-            if (isOutOfBounds(newX, newY)) {
-                break; // Can't look beyond the board
+                if (isOutOfBounds(newX, newY)) {
+                    break; // Can't look beyond the board
+                }
+
+                if (isAsteroid(field[newX][newY])) {
+                    break; // Path is blocked by asteroid
+                }
+
+                if (isEnemy(field[newX][newY])) {
+                    enemyInRange = true;
+                    break;
+                }
             }
 
-            if (isAsteroid(field[newX][newY])) {
-                break; // Path is blocked by asteroid
-            }
-
-            if (isEnemy(field[newX][newY])) {
-                // Enemy is within firing range
-                return "F"; // Fire at enemy
+            if (enemyInRange) {
+                // Rotate towards the enemy direction
+                String rotation = getMinimalRotation(dirIndex, i);
+                if (rotation != null) {
+                    return rotation;
+                } else {
+                    // Already facing the enemy, fire!
+                    return "F";
+                }
             }
         }
 
@@ -225,7 +239,7 @@ public class SpaceshipAI {
         } else if (diff == 3) {
             return "L";
         } else if (diff == 2) {
-            // Do not turn around unless necessary
+            // Turn around
             return "R";
         } else {
             return null; // Already facing the desired direction
