@@ -1,7 +1,5 @@
 package com.team.name.bestrestservice;
 
-import com.team.name.bestrestservice.controller.TaskResolveController;
-
 import java.util.*;
 
 public class SpaceshipAI {
