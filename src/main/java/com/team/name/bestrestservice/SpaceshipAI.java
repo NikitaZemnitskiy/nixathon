@@ -3,311 +3,216 @@ import java.util.*;
 
 public class SpaceshipAI {
 
-    // Class-level variables
-    private final int[] dx = { -1, 0, 1, 0 }; // North, East, South, West
-    private final int[] dy = { 0, 1, 0, -1 }; // North, East, South, West
-    private final String[] directions = { "N", "E", "S", "W" };
-    private final String[] fullDirections = { "North", "East", "South", "West" };
-    private final int BOARD_SIZE = 13;
-    private final int CENTER = BOARD_SIZE / 2;
-
     public String decideMove(GameStatus gameStatus) {
-        String[][] field = gameStatus.field;
+        String[][] field = gameStatus.getField();
 
-        int myX = -1, myY = -1;
-        String myDirection = "";
+        int shipX = -1;
+        int shipY = -1;
+        char shipDirection = ' ';
 
-        // Find our position and direction
-        for (int i = 0; i < BOARD_SIZE; i++) {
-            for (int j = 0; j < BOARD_SIZE; j++) {
-                String cell = field[i][j];
+        // Find our ship
+        outerLoop:
+        for (int y = 0; y < 13; y++) {
+            for (int x = 0; x < 13; x++) {
+                String cell = field[y][x];
                 if (cell != null && cell.startsWith("P")) {
-                    myX = i;
-                    myY = j;
-                    if (cell.length() > 1) {
-                        myDirection = cell.substring(1); // Extract direction string
-                    }
-                    break;
-                }
-            }
-            if (myX != -1) break;
-        }
-
-        if (myX == -1 || myY == -1 || myDirection.isEmpty()) {
-            // Could not find our ship or direction
-            return "M"; // Default move
-        }
-
-        // Map direction to index
-        int dirIndex = getDirectionIndex(myDirection);
-        if (dirIndex == -1) {
-            // Invalid direction
-            return "M"; // Default move
-        }
-
-        // Check for enemies in all directions except behind within radius 4
-        for (int i = 0; i < 4; i++) {
-            if (isOppositeDirection(dirIndex, i)) {
-                continue; // Skip the direction opposite to current direction (enemy behind)
-            }
-
-            boolean enemyInRange = false;
-            for (int distance = 1; distance <= 4; distance++) {
-                int newX = myX + dx[i] * distance;
-                int newY = myY + dy[i] * distance;
-
-                if (isOutOfBounds(newX, newY)) {
-                    break; // Can't look beyond the board
-                }
-
-                if (isAsteroid(field[newX][newY])) {
-                    break; // Path is blocked by asteroid
-                }
-
-                if (isEnemy(field[newX][newY])) {
-                    enemyInRange = true;
-                    break;
-                }
-            }
-
-            if (enemyInRange) {
-                // Rotate towards the enemy direction if not already facing it
-                String rotation = getMinimalRotationForEnemyRotation(dirIndex, i);
-                if (rotation != null) {
-                    return rotation;
-                } else {
-                    // Already facing the enemy, fire!
-                    return "F";
+                    shipX = x;
+                    shipY = y;
+                    shipDirection = cell.charAt(1);
+                    break outerLoop;
                 }
             }
         }
 
-        // Check if we are outside the center area
-        if (findNearestCoin(field, myX, myY) == null && !isWithinCenterArea(myX, myY)) {
+        if (shipX == -1 || shipY == -1) {
+            // Ship not found, default to move
+            return "M";
+        }
+
+        // Coordinates of the center
+        int centerX = 6;
+        int centerY = 6;
+
+        if (shipX != centerX || shipY != centerY) {
             // Move towards the center
-            String moveToCenter = moveToCenter(field, myX, myY, dirIndex);
-            if (moveToCenter != null) {
-                return moveToCenter;
+            String move = moveTowards(shipX, shipY, shipDirection, centerX, centerY, field);
+            return move;
+        } else {
+            // At the center, target the nearest enemy
+            String move = attackNearestEnemy(shipX, shipY, shipDirection, field);
+            return move;
+        }
+    }
+
+    private String moveTowards(int shipX, int shipY, char shipDirection, int targetX, int targetY, String[][] field) {
+        int dx = targetX - shipX;
+        int dy = targetY - shipY;
+
+        char desiredDirection;
+
+        // Decide whether to move in X or Y direction
+        if (Math.abs(dx) > Math.abs(dy)) {
+            desiredDirection = dx > 0 ? 'E' : 'W';
+        } else {
+            desiredDirection = dy > 0 ? 'S' : 'N';
+        }
+
+        if (shipDirection == desiredDirection) {
+            // Attempt to move forward if the next cell is empty or contains a coin
+            int[] nextPos = getNextPosition(shipX, shipY, shipDirection);
+            if (isCellFree(nextPos[0], nextPos[1], field)) {
+                return "M";
+            } else {
+                // Cannot move forward, try rotating
+                return "L";
             }
         } else {
-            // Try to collect coins
-            int[] coinTarget = findNearestCoin(field, myX, myY);
-            if (coinTarget != null) {
-                String nextMove = getNextMoveTowardsTarget(field, myX, myY, dirIndex, coinTarget[0], coinTarget[1]);
-                if (nextMove != null) {
-                    return nextMove;
+            // Rotate towards the desired direction
+            return rotateTowards(shipDirection, desiredDirection);
+        }
+    }
+
+    private String attackNearestEnemy(int shipX, int shipY, char shipDirection, String[][] field) {
+        // Find all enemies
+        List<EnemyShip> enemies = new ArrayList<>();
+        for (int y = 0; y < 13; y++) {
+            for (int x = 0; x < 13; x++) {
+                String cell = field[y][x];
+                if (cell != null && cell.startsWith("E")) {
+                    char enemyDirection = cell.charAt(1);
+                    enemies.add(new EnemyShip(x, y, enemyDirection));
                 }
             }
         }
 
-        // Try to move forward if possible
-        String moveForward = tryMoveForward(field, myX, myY, dirIndex);
-        if (moveForward != null) {
-            return moveForward;
+        if (enemies.isEmpty()) {
+            // No enemies found, default to move
+            return "M";
         }
 
-        // Rotate to find a possible move
-        String rotateMove = findRotationToMove(field, myX, myY, dirIndex);
-        if (rotateMove != null) {
-            return rotateMove;
-        }
-
-        // If no possible move, attempt to stay in place
-        return "M"; // May result in staying in place if blocked
-    }
-
-    private boolean isOppositeDirection(int currentIndex, int targetIndex) {
-        return (currentIndex + 2) % 4 == targetIndex;
-    }
-
-    private int getDirectionIndex(String direction) {
-        for (int i = 0; i < directions.length; i++) {
-            if (direction.equals(directions[i]) || direction.equals(fullDirections[i])) {
-                return i;
-            }
-        }
-        return -1; // Direction not found
-    }
-
-    private boolean isEnemy(String cell) {
-        return cell != null && cell.startsWith("E");
-    }
-
-    private boolean isAsteroid(String cell) {
-        return "A".equals(cell);
-    }
-
-    private boolean isEmpty(String cell) {
-        return "_".equals(cell) || "C".equals(cell);
-    }
-
-    private boolean isWithinBounds(int x, int y) {
-        return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
-    }
-
-    private boolean isOutOfBounds(int x, int y) {
-        return !isWithinBounds(x, y);
-    }
-
-    private boolean isWithinCenterArea(int x, int y) {
-        return Math.abs(x - CENTER) + Math.abs(y - CENTER) <= 3;
-    }
-
-    private int[] findNearestCoin(String[][] field, int myX, int myY) {
+        // Find the nearest enemy
+        EnemyShip nearestEnemy = null;
         int minDistance = Integer.MAX_VALUE;
-        int[] target = null;
-
-        for (int i = 0; i < BOARD_SIZE; i++) {
-            for (int j = 0; j < BOARD_SIZE; j++) {
-                if ("C".equals(field[i][j])) {
-                    int distance = Math.abs(myX - i) + Math.abs(myY - j);
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        target = new int[] { i, j };
-                    }
-                }
+        for (EnemyShip enemy : enemies) {
+            int distance = Math.abs(enemy.x - shipX) + Math.abs(enemy.y - shipY);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestEnemy = enemy;
             }
         }
-        return target;
-    }
 
-    private String getNextMoveTowardsTarget(String[][] field, int myX, int myY, int dirIndex, int targetX, int targetY) {
-        // Determine possible directions towards the target
-        int deltaX = targetX - myX;
-        int deltaY = targetY - myY;
+        // Determine the direction towards the nearest enemy
+        int dx = nearestEnemy.x - shipX;
+        int dy = nearestEnemy.y - shipY;
 
-        List<Integer> possibleDirections = new ArrayList<>();
-        if (deltaX < 0) possibleDirections.add(0); // North
-        if (deltaX > 0) possibleDirections.add(2); // South
-        if (deltaY > 0) possibleDirections.add(1); // East
-        if (deltaY < 0) possibleDirections.add(3); // West
+        char desiredDirection;
 
-        // Try each possible direction
-        for (int desiredDirIndex : possibleDirections) {
-            String move = attemptMoveInDirection(field, myX, myY, dirIndex, desiredDirIndex);
-            if (move != null) {
-                return move;
-            }
-        }
-        return null; // No valid moves towards target
-    }
-
-    private String moveToCenter(String[][] field, int myX, int myY, int dirIndex) {
-        // Determine the direction towards the center
-        int deltaX = CENTER - myX;
-        int deltaY = CENTER - myY;
-
-        List<Integer> possibleDirections = new ArrayList<>();
-        if (deltaX < 0) possibleDirections.add(0); // North
-        if (deltaX > 0) possibleDirections.add(2); // South
-        if (deltaY > 0) possibleDirections.add(1); // East
-        if (deltaY < 0) possibleDirections.add(3); // West
-
-        // Prioritize directions that move closer to the center
-        possibleDirections.sort((a, b) -> {
-            int distanceA = Math.abs((myX + dx[a]) - CENTER) + Math.abs((myY + dy[a]) - CENTER);
-            int distanceB = Math.abs((myX + dx[b]) - CENTER) + Math.abs((myY + dy[b]) - CENTER);
-            return Integer.compare(distanceA, distanceB);
-        });
-
-        // Try each possible direction
-        for (int desiredDirIndex : possibleDirections) {
-            String move = attemptMoveInDirection(field, myX, myY, dirIndex, desiredDirIndex);
-            if (move != null) {
-                return move;
-            }
-        }
-        return null;
-    }
-
-    private String attemptMoveInDirection(String[][] field, int myX, int myY, int dirIndex, int desiredDirIndex) {
-        int forwardX = myX + dx[desiredDirIndex];
-        int forwardY = myY + dy[desiredDirIndex];
-
-        if (isOutOfBounds(forwardX, forwardY)) {
-            return null; // Can't move off the board
+        if (dx == 0 && dy == 0) {
+            // Same position (collision), default to move
+            return "M";
+        } else if (dx == 0) {
+            desiredDirection = dy > 0 ? 'S' : 'N';
+        } else if (dy == 0) {
+            desiredDirection = dx > 0 ? 'E' : 'W';
+        } else {
+            // Enemy not in line, prefer vertical rotation
+            desiredDirection = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : (dy > 0 ? 'S' : 'N');
         }
 
-        if (isEmpty(field[forwardX][forwardY])) {
-            String rotation = getMinimalRotation(dirIndex, desiredDirIndex);
-            if (rotation != null) {
-                return rotation;
+        if (shipDirection == desiredDirection) {
+            // Check if the enemy is within firing range
+            if (isEnemyInFiringRange(shipX, shipY, shipDirection, nearestEnemy, field)) {
+                return "F";
             } else {
-                // Already facing the desired direction
+                // Wait or move
                 return "M";
             }
-        }
-        return null;
-    }
-
-    private String getMinimalRotation(int currentIndex, int desiredIndex) {
-        int diff = (desiredIndex - currentIndex + 4) % 4;
-        if (diff == 1) {
-            return "R";
-        } else if (diff == 3) {
-            return "L";
-        } else if (diff == 2) {
-            // Turn around
-            return "R";
         } else {
-            return null; // Already facing the desired direction
+            // Rotate towards the enemy
+            return rotateTowards(shipDirection, desiredDirection);
         }
     }
 
-    private String getMinimalRotationForEnemyRotation(int currentIndex, int desiredIndex) {
-        int diff = (desiredIndex - currentIndex + 4) % 4;
-        if (diff == 1) {
-            return "R";
-        } else if (diff == 3) {
-            return "L";
-        } else if (diff == 2) {
-            // Turn around
-            return null;
-        } else {
-            return null; // Already facing the desired direction
-        }
-    }
+    private boolean isEnemyInFiringRange(int shipX, int shipY, char shipDirection, EnemyShip enemy, String[][] field) {
+        int range = 4;
+        int dx = 0, dy = 0;
 
-    private String tryMoveForward(String[][] field, int myX, int myY, int dirIndex) {
-        int forwardX = myX + dx[dirIndex];
-        int forwardY = myY + dy[dirIndex];
-
-        if (isOutOfBounds(forwardX, forwardY)) {
-            return null; // Can't move off the board
+        switch (shipDirection) {
+            case 'N': dy = -1; break;
+            case 'S': dy = 1; break;
+            case 'E': dx = 1; break;
+            case 'W': dx = -1; break;
         }
 
-        if (isEmpty(field[forwardX][forwardY])) {
-            return "M";
-        } else {
-            return null;
-        }
-    }
+        int currentX = shipX;
+        int currentY = shipY;
+        for (int i = 1; i <= range; i++) {
+            currentX += dx;
+            currentY += dy;
 
-    private String findRotationToMove(String[][] field, int myX, int myY, int currentDirIndex) {
-        for (int i = 1; i <= 3; i++) {
-            int newIndex = (currentDirIndex + i) % 4;
-
-            int forwardX = myX + dx[newIndex];
-            int forwardY = myY + dy[newIndex];
-
-            if (isOutOfBounds(forwardX, forwardY)) {
-                continue; // Can't move off the board
+            if (currentX < 0 || currentX >= 13 || currentY < 0 || currentY >= 13) {
+                break; // Out of bounds
             }
 
-            if (isEmpty(field[forwardX][forwardY])) {
-                // Decide whether to rotate left or right
-                int diff = (newIndex - currentDirIndex + 4) % 4;
-                if (diff == 1) {
-                    return "R";
-                } else if (diff == 3) {
-                    return "L";
-                }
+            String cell = field[currentY][currentX];
+
+            if (cell != null && cell.startsWith("A")) {
+                break; // Asteroid blocks the blast
+            }
+
+            if (currentX == enemy.x && currentY == enemy.y) {
+                return true; // Enemy is in firing range
             }
         }
-        return null;
+
+        return false;
     }
 
+    private String rotateTowards(char currentDirection, char desiredDirection) {
+        String directions = "NESW";
+        int currentIndex = directions.indexOf(currentDirection);
+        int desiredIndex = directions.indexOf(desiredDirection);
 
+        int leftTurns = (currentIndex - desiredIndex + 4) % 4;
+        int rightTurns = (desiredIndex - currentIndex + 4) % 4;
+
+        if (leftTurns <= rightTurns) {
+            return "L";
+        } else {
+            return "R";
+        }
+    }
+
+    private int[] getNextPosition(int x, int y, char direction) {
+        switch (direction) {
+            case 'N': return new int[]{x, y - 1};
+            case 'S': return new int[]{x, y + 1};
+            case 'E': return new int[]{x + 1, y};
+            case 'W': return new int[]{x - 1, y};
+            default: return new int[]{x, y};
+        }
+    }
+
+    private boolean isCellFree(int x, int y, String[][] field) {
+        if (x < 0 || x >= 13 || y < 0 || y >= 13) {
+            return false; // Out of bounds
+        }
+        String cell = field[y][x];
+        return cell == null || cell.equals("_") || cell.equals("C");
+    }
+
+    class EnemyShip {
+        int x, y;
+        char direction;
+
+        EnemyShip(int x, int y, char direction) {
+            this.x = x;
+            this.y = y;
+            this.direction = direction;
+        }
+    }
+
+    // Include the GameStatus class here if needed
     public static class GameStatus {
         String[][] field = new String[13][13];
         int narrowingIn;
