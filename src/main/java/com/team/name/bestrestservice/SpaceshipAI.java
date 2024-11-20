@@ -65,13 +65,7 @@ public class SpaceshipAI {
         }
 
         // Check if we are outside the center area
-        if (!isWithinCenterArea(myX, myY)) {
-            // Move towards the center
-            String moveToCenter = moveToCenter(field, myX, myY, dirIndex);
-            if (moveToCenter != null) {
-                return moveToCenter;
-            }
-        } else {
+
             // Try to collect coins
             int[] coinTarget = findNearestCoin(field, myX, myY);
             if (coinTarget != null) {
@@ -79,7 +73,7 @@ public class SpaceshipAI {
                 if (nextMove != null) {
                     return nextMove;
                 }
-            }
+
         }
 
         // Try to move forward if possible
