@@ -1,104 +1,235 @@
 package com.team.name.bestrestservice;
+
 import com.team.name.bestrestservice.controller.TaskResolveController;
 
 import java.util.*;
 
 public class SpaceshipAI {
 
-    public static String determineMove(TaskResolveController.GameStatus gameStatus) {
-        String[][] board = gameStatus.field;
-        int narrowingIn = gameStatus.narrowingIn;
+    public String decideMove(GameStatus gameStatus) {
+        String[][] field = gameStatus.field;
 
-        // Locate player's ship and game entities
-        int playerX = -1, playerY = -1;
-        char playerDirection = 'N';
-        List<int[]> coins = new ArrayList<>();
-        List<int[]> enemies = new ArrayList<>();
-        int rows = board.length;
-        int cols = board[0].length;
+        int myX = -1, myY = -1;
+        char myDirection = ' ';
 
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-                String cell = board[i][j];
+        // Find our position and direction
+        for (int i = 0; i < field.length; i++) {
+            for (int j = 0; j < field[i].length; j++) {
+                String cell = field[i][j];
                 if (cell.startsWith("P")) {
-                    playerX = i;
-                    playerY = j;
-                    playerDirection = cell.charAt(1);
-                } else if (cell.equals("C")) {
-                    coins.add(new int[]{i, j});
-                } else if (cell.startsWith("E")) {
-                    enemies.add(new int[]{i, j, cell.charAt(1)});
+                    myX = i;
+                    myY = j;
+                    if (cell.length() > 1) {
+                        myDirection = cell.charAt(1);
+                    }
+                    break;
+                }
+            }
+            if (myX != -1) break;
+        }
+
+        // Define movement deltas based on direction
+        int[] dx = { -1, 1, 0, 0 }; // N, S, W, E
+        int[] dy = { 0, 0, -1, 1 }; // N, S, W, E
+        char[] directions = { 'N', 'S', 'W', 'E' };
+
+        // Map direction to index
+        int dirIndex = "NSWE".indexOf(myDirection);
+
+        // Check if an enemy is in firing range
+        for (int distance = 1; distance <= 4; distance++) {
+            int newX = myX + dx[dirIndex] * distance;
+            int newY = myY + dy[dirIndex] * distance;
+
+            if (isOutOfBounds(newX, newY) || isAsteroid(field[newX][newY])) {
+                break; // Blast is blocked by asteroid or boundary
+            }
+
+            if (isEnemy(field[newX][newY])) {
+                return "F"; // Fire at enemy
+            }
+        }
+
+        // Try to move towards the nearest coin
+        int[] coinTarget = findNearestCoin(field, myX, myY);
+
+        if (coinTarget != null) {
+            String nextMove = getNextMoveTowardsTarget(field, myX, myY, myDirection, coinTarget[0], coinTarget[1]);
+            if (nextMove != null) {
+                return nextMove;
+            }
+        }
+
+        // If no coins, move forward if possible
+        int forwardX = myX + dx[dirIndex];
+        int forwardY = myY + dy[dirIndex];
+        if (isWithinBounds(forwardX, forwardY) && isEmpty(field[forwardX][forwardY])) {
+            return "M";
+        }
+
+        // Rotate to find a possible move
+        String rotateMove = findRotationToMove(field, myX, myY, myDirection);
+        if (rotateMove != null) {
+            return rotateMove;
+        }
+
+        // If no possible move, stay in place (or move forward if blocked)
+        return "M"; // Attempt to move forward even if blocked
+    }
+
+    private boolean isEnemy(String cell) {
+        return cell.startsWith("E");
+    }
+
+    private boolean isAsteroid(String cell) {
+        return cell.equals("A");
+    }
+
+    private boolean isEmpty(String cell) {
+        return cell.equals("_") || cell.equals("C");
+    }
+
+    private boolean isWithinBounds(int x, int y) {
+        return x >= 0 && x < 13 && y >= 0 && y < 13;
+    }
+
+    private boolean isOutOfBounds(int x, int y) {
+        return x < 0 || x >= 13 || y < 0 || y >= 13;
+    }
+
+    private int[] findNearestCoin(String[][] field, int myX, int myY) {
+        int minDistance = Integer.MAX_VALUE;
+        int[] target = null;
+
+        for (int i = 0; i < field.length; i++) {
+            for (int j = 0; j < field[i].length; j++) {
+                if (field[i][j].equals("C")) {
+                    int distance = Math.abs(myX - i) + Math.abs(myY - j);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        target = new int[] { i, j };
+                    }
                 }
             }
         }
+        return target;
+    }
 
-        // Decide action based on game state
-        if (playerX == -1 || playerY == -1) return "M"; // Default fallback
+    private String getNextMoveTowardsTarget(String[][] field, int myX, int myY, char myDirection, int targetX, int targetY) {
+        // Determine the direction to the target
+        int deltaX = targetX - myX;
+        int deltaY = targetY - myY;
 
-        // 1. Check for enemies in firing range
-        for (int[] enemy : enemies) {
-            if (isInFiringRange(playerX, playerY, playerDirection, enemy[0], enemy[1])) {
-                return "F";
+        char desiredDirection;
+        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+            desiredDirection = deltaX < 0 ? 'N' : 'S';
+        } else {
+            desiredDirection = deltaY < 0 ? 'W' : 'E';
+        }
+
+        if (myDirection == desiredDirection) {
+            // Try to move forward
+            int[] dx = { -1, 1, 0, 0 }; // N, S, W, E
+            int[] dy = { 0, 0, -1, 1 }; // N, S, W, E
+            int dirIndex = "NSWE".indexOf(myDirection);
+
+            int forwardX = myX + dx[dirIndex];
+            int forwardY = myY + dy[dirIndex];
+
+            if (isWithinBounds(forwardX, forwardY) && isEmpty(field[forwardX][forwardY])) {
+                return "M";
+            } else {
+                return null;
+            }
+        } else {
+            // Determine the minimal rotation
+            String rotation = getMinimalRotation(myDirection, desiredDirection);
+            return rotation;
+        }
+    }
+
+    private String getMinimalRotation(char currentDirection, char desiredDirection) {
+        String directions = "NESW";
+        int currentIndex = directions.indexOf(currentDirection);
+        int desiredIndex = directions.indexOf(desiredDirection);
+
+        int diff = (desiredIndex - currentIndex + 4) % 4;
+        if (diff == 1) {
+            return "R";
+        } else if (diff == 3) {
+            return "L";
+        } else if (diff == 2) {
+            // Do not turn around yourself; choose to rotate right
+            return "R";
+        } else {
+            return null; // Already facing the desired direction
+        }
+    }
+
+    private String findRotationToMove(String[][] field, int myX, int myY, char myDirection) {
+        String directions = "NESW";
+        int currentIndex = directions.indexOf(myDirection);
+
+        for (int i = 1; i <= 3; i++) {
+            int newIndex = (currentIndex + i) % 4;
+            char newDirection = directions.charAt(newIndex);
+
+            int[] dx = { -1, 0, 1, 0 }; // N, E, S, W
+            int[] dy = { 0, 1, 0, -1 }; // N, E, S, W
+            int dirIndex = newIndex;
+
+            int forwardX = myX + dx[dirIndex];
+            int forwardY = myY + dy[dirIndex];
+
+            if (isWithinBounds(forwardX, forwardY) && isEmpty(field[forwardX][forwardY])) {
+                // Decide whether to rotate left or right
+                if (i == 1) {
+                    return "R";
+                } else if (i == 3) {
+                    return "L";
+                } else {
+                    // i == 2, do not turn around yourself
+                    return "R";
+                }
             }
         }
+        return null;
+    }
 
-        // 2. Move towards the nearest coin
-        int[] targetCoin = findNearest(playerX, playerY, coins);
-        if (targetCoin != null) {
-            return navigateTo(playerX, playerY, playerDirection, targetCoin[0], targetCoin[1]);
+    // GameStatus class as provided
+    public static class GameStatus {
+        String[][] field = new String[13][13];
+        int narrowingIn;
+        int gameId;
+
+        public GameStatus(String[][] field, int narrowingIn, int gameId) {
+            this.field = field;
+            this.narrowingIn = narrowingIn;
+            this.gameId = gameId;
         }
 
-        // 3. Avoid collisions or narrowing zones
-        if (narrowingIn <= 1 && isNearEdge(playerX, playerY, rows, cols)) {
-            return avoidEdge(playerDirection);
+        public String[][] getField() {
+            return field;
         }
 
-        // 4. Default movement
-        return "M";
-    }
-
-    private static boolean isInFiringRange(int x, int y, char direction, int targetX, int targetY) {
-        switch (direction) {
-            case 'N': return x > targetX && x - targetX <= 4 && y == targetY;
-            case 'S': return x < targetX && targetX - x <= 4 && y == targetY;
-            case 'E': return y < targetY && targetY - y <= 4 && x == targetX;
-            case 'W': return y > targetY && y - targetY <= 4 && x == targetX;
+        public void setField(String[][] field) {
+            this.field = field;
         }
-        return false;
-    }
-    private static int[] findNearest(int x, int y, List<int[]> targets) {
-        int[] nearest = null;
-        int minDistance = Integer.MAX_VALUE;
 
-        for (int[] target : targets) {
-            int distance = Math.abs(x - target[0]) + Math.abs(y - target[1]);
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearest = target;
-            }
+        public int getNarrowingIn() {
+            return narrowingIn;
         }
-        return nearest;
-    }
 
-    private static String navigateTo(int x, int y, char direction, int targetX, int targetY) {
-        if (x < targetX) {
-            return direction == 'S' ? "M" : "R";
-        } else if (x > targetX) {
-            return direction == 'N' ? "M" : "L";
-        } else if (y < targetY) {
-            return direction == 'E' ? "M" : "R";
-        } else if (y > targetY) {
-            return direction == 'W' ? "M" : "L";
+        public void setNarrowingIn(int narrowingIn) {
+            this.narrowingIn = narrowingIn;
         }
-        return "M";
-    }
 
-    private static boolean isNearEdge(int x, int y, int rows, int cols) {
-        return x == 1 || x == rows - 2 || y == 1 || y == cols - 2;
-    }
+        public int getGameId() {
+            return gameId;
+        }
 
-    private static String avoidEdge(char direction) {
-        return "R";
+        public void setGameId(int gameId) {
+            this.gameId = gameId;
+        }
     }
-
 }

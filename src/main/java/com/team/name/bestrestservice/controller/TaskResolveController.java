@@ -21,21 +21,9 @@ public class TaskResolveController {
     }
 
     @PostMapping(value = "/move", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, String>> move(@RequestBody GameStatus gameStatus) {
-        return ResponseEntity.ok(Collections.singletonMap("move", SpaceshipAI.determineMove(gameStatus)));
+    public ResponseEntity<Map<String, String>> move(@RequestBody SpaceshipAI.GameStatus gameStatus) {
+        SpaceshipAI spaceshipAI = new SpaceshipAI();
+        return ResponseEntity.ok(Collections.singletonMap("move", spaceshipAI.decideMove(gameStatus)));
     }
 
-
-    public static class GameStatus implements Serializable {
-
-        public GameStatus(String[][] field, int narrowingIn, int gameId) {
-            this.field = field;
-            this.narrowingIn = narrowingIn;
-            this.gameId = gameId;
-        }
-
-        public String [][] field = new String [13][13];
-        public int narrowingIn;
-        public int gameId;
-    }
 }
