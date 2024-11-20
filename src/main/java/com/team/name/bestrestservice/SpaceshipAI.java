@@ -24,7 +24,7 @@ public class SpaceshipAI {
         for (int i = 0; i < BOARD_SIZE; i++) {
             for (int j = 0; j < BOARD_SIZE; j++) {
                 String cell = field[i][j];
-                if (cell.startsWith("P")) {
+                if (cell != null && cell.startsWith("P")) {
                     myX = i;
                     myY = j;
                     if (cell.length() > 1) {
@@ -67,19 +67,21 @@ public class SpaceshipAI {
             }
         }
 
-        // Try to move towards the center of the board
-        String moveToCenter = moveToCenter(field, myX, myY, dirIndex);
-        if (moveToCenter != null) {
-            return moveToCenter;
-        }
-
-        // Try to move towards the nearest coin
-        int[] coinTarget = findNearestCoin(field, myX, myY);
-
-        if (coinTarget != null) {
-            String nextMove = getNextMoveTowardsTarget(field, myX, myY, dirIndex, coinTarget[0], coinTarget[1]);
-            if (nextMove != null) {
-                return nextMove;
+        // Check if we are outside the center area
+        if (!isWithinCenterArea(myX, myY)) {
+            // Move towards the center
+            String moveToCenter = moveToCenter(field, myX, myY, dirIndex);
+            if (moveToCenter != null) {
+                return moveToCenter;
+            }
+        } else {
+            // Try to collect coins
+            int[] coinTarget = findNearestCoin(field, myX, myY);
+            if (coinTarget != null) {
+                String nextMove = getNextMoveTowardsTarget(field, myX, myY, dirIndex, coinTarget[0], coinTarget[1]);
+                if (nextMove != null) {
+                    return nextMove;
+                }
             }
         }
 
@@ -126,6 +128,10 @@ public class SpaceshipAI {
 
     private boolean isOutOfBounds(int x, int y) {
         return !isWithinBounds(x, y);
+    }
+
+    private boolean isWithinCenterArea(int x, int y) {
+        return Math.abs(x - CENTER) + Math.abs(y - CENTER) <= 3;
     }
 
     private int[] findNearestCoin(String[][] field, int myX, int myY) {
@@ -267,6 +273,7 @@ public class SpaceshipAI {
         }
         return null;
     }
+
 
     public static class GameStatus {
         String[][] field = new String[13][13];
