@@ -1,4 +1,5 @@
 package com.team.name.bestrestservice;
+
 import java.util.*;
 
 public class SpaceshipAI {
@@ -45,6 +46,11 @@ public class SpaceshipAI {
             return "M"; // Default move
         }
 
+        // Adjust bounds based on narrowingIn
+        int safeRadius = getSafeRadius(gameStatus.narrowingIn);
+        int minBound = CENTER - safeRadius;
+        int maxBound = CENTER + safeRadius;
+
         // Check for enemies in all directions except behind within radius 4
         for (int i = 0; i < 4; i++) {
             if (isOppositeDirection(dirIndex, i)) {
@@ -56,8 +62,8 @@ public class SpaceshipAI {
                 int newX = myX + dx[i] * distance;
                 int newY = myY + dy[i] * distance;
 
-                if (isOutOfBounds(newX, newY)) {
-                    break; // Can't look beyond the board
+                if (isOutOfBounds(newX, newY, minBound, maxBound)) {
+                    break; // Can't look beyond the board or safe area
                 }
 
                 if (isAsteroid(field[newX][newY])) {
@@ -82,18 +88,18 @@ public class SpaceshipAI {
             }
         }
 
-        // Check if we are outside the center area
-        if (findNearestCoin(field, myX, myY) == null && !isWithinCenterArea(myX, myY)) {
+        // Check if we are outside the safe area
+        if (findNearestCoin(field, myX, myY, minBound, maxBound) == null && !isWithinSafeArea(myX, myY, minBound, maxBound)) {
             // Move towards the center
-            String moveToCenter = moveToCenter(field, myX, myY, dirIndex);
+            String moveToCenter = moveToCenter(field, myX, myY, dirIndex, minBound, maxBound);
             if (moveToCenter != null) {
                 return moveToCenter;
             }
         } else {
             // Try to collect coins
-            int[] coinTarget = findNearestCoin(field, myX, myY);
+            int[] coinTarget = findNearestCoin(field, myX, myY, minBound, maxBound);
             if (coinTarget != null) {
-                String nextMove = getNextMoveTowardsTarget(field, myX, myY, dirIndex, coinTarget[0], coinTarget[1]);
+                String nextMove = getNextMoveTowardsTarget(field, myX, myY, dirIndex, coinTarget[0], coinTarget[1], minBound, maxBound);
                 if (nextMove != null) {
                     return nextMove;
                 }
@@ -101,19 +107,28 @@ public class SpaceshipAI {
         }
 
         // Try to move forward if possible
-        String moveForward = tryMoveForward(field, myX, myY, dirIndex);
+        String moveForward = tryMoveForward(field, myX, myY, dirIndex, minBound, maxBound);
         if (moveForward != null) {
             return moveForward;
         }
 
         // Rotate to find a possible move
-        String rotateMove = findRotationToMove(field, myX, myY, dirIndex);
+        String rotateMove = findRotationToMove(field, myX, myY, dirIndex, minBound, maxBound);
         if (rotateMove != null) {
             return rotateMove;
         }
 
         // If no possible move, attempt to stay in place
         return "M"; // May result in staying in place if blocked
+    }
+
+    private int getSafeRadius(int narrowingIn) {
+        int shrinkSteps = (int) Math.ceil((double) narrowingIn / 5);
+        return (BOARD_SIZE / 2) - shrinkSteps;
+    }
+
+    private boolean isWithinSafeArea(int x, int y, int minBound, int maxBound) {
+        return x >= minBound && x <= maxBound && y >= minBound && y <= maxBound;
     }
 
     private boolean isOppositeDirection(int currentIndex, int targetIndex) {
@@ -141,24 +156,16 @@ public class SpaceshipAI {
         return "_".equals(cell) || "C".equals(cell);
     }
 
-    private boolean isWithinBounds(int x, int y) {
-        return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
+    private boolean isOutOfBounds(int x, int y, int minBound, int maxBound) {
+        return x < minBound || x > maxBound || y < minBound || y > maxBound;
     }
 
-    private boolean isOutOfBounds(int x, int y) {
-        return !isWithinBounds(x, y);
-    }
-
-    private boolean isWithinCenterArea(int x, int y) {
-        return Math.abs(x - CENTER) + Math.abs(y - CENTER) <= 3;
-    }
-
-    private int[] findNearestCoin(String[][] field, int myX, int myY) {
+    private int[] findNearestCoin(String[][] field, int myX, int myY, int minBound, int maxBound) {
         int minDistance = Integer.MAX_VALUE;
         int[] target = null;
 
-        for (int i = 0; i < BOARD_SIZE; i++) {
-            for (int j = 0; j < BOARD_SIZE; j++) {
+        for (int i = minBound; i <= maxBound; i++) {
+            for (int j = minBound; j <= maxBound; j++) {
                 if ("C".equals(field[i][j])) {
                     int distance = Math.abs(myX - i) + Math.abs(myY - j);
                     if (distance < minDistance) {
@@ -171,7 +178,7 @@ public class SpaceshipAI {
         return target;
     }
 
-    private String getNextMoveTowardsTarget(String[][] field, int myX, int myY, int dirIndex, int targetX, int targetY) {
+    private String getNextMoveTowardsTarget(String[][] field, int myX, int myY, int dirIndex, int targetX, int targetY, int minBound, int maxBound) {
         // Determine possible directions towards the target
         int deltaX = targetX - myX;
         int deltaY = targetY - myY;
@@ -182,9 +189,22 @@ public class SpaceshipAI {
         if (deltaY > 0) possibleDirections.add(1); // East
         if (deltaY < 0) possibleDirections.add(3); // West
 
+        // Prioritize directions based on proximity to the target
+        possibleDirections.sort((a, b) -> {
+            int newX_A = myX + dx[a];
+            int newY_A = myY + dy[a];
+            int distanceA = Math.abs(newX_A - targetX) + Math.abs(newY_A - targetY);
+
+            int newX_B = myX + dx[b];
+            int newY_B = myY + dy[b];
+            int distanceB = Math.abs(newX_B - targetX) + Math.abs(newY_B - targetY);
+
+            return Integer.compare(distanceA, distanceB);
+        });
+
         // Try each possible direction
         for (int desiredDirIndex : possibleDirections) {
-            String move = attemptMoveInDirection(field, myX, myY, dirIndex, desiredDirIndex);
+            String move = attemptMoveInDirection(field, myX, myY, dirIndex, desiredDirIndex, minBound, maxBound);
             if (move != null) {
                 return move;
             }
@@ -192,27 +212,61 @@ public class SpaceshipAI {
         return null; // No valid moves towards target
     }
 
-    private String moveToCenter(String[][] field, int myX, int myY, int dirIndex) {
-        // Determine the direction towards the center
+    private String moveToCenter(String[][] field, int myX, int myY, int dirIndex, int minBound, int maxBound) {
+        // Determine the delta between current position and center
         int deltaX = CENTER - myX;
         int deltaY = CENTER - myY;
 
+        // List of possible directions to consider
         List<Integer> possibleDirections = new ArrayList<>();
-        if (deltaX < 0) possibleDirections.add(0); // North
-        if (deltaX > 0) possibleDirections.add(2); // South
-        if (deltaY > 0) possibleDirections.add(1); // East
-        if (deltaY < 0) possibleDirections.add(3); // West
 
-        // Prioritize directions that move closer to the center
+        // Add directions that reduce both deltaX and deltaY
+        if (deltaX > 0 && deltaY > 0) {
+            // Need to move South and East
+            possibleDirections.add(2); // South
+            possibleDirections.add(1); // East
+        } else if (deltaX > 0 && deltaY < 0) {
+            // Need to move South and West
+            possibleDirections.add(2); // South
+            possibleDirections.add(3); // West
+        } else if (deltaX < 0 && deltaY > 0) {
+            // Need to move North and East
+            possibleDirections.add(0); // North
+            possibleDirections.add(1); // East
+        } else if (deltaX < 0 && deltaY < 0) {
+            // Need to move North and West
+            possibleDirections.add(0); // North
+            possibleDirections.add(3); // West
+        } else if (deltaX == 0) {
+            if (deltaY > 0) {
+                possibleDirections.add(1); // East
+            } else if (deltaY < 0) {
+                possibleDirections.add(3); // West
+            }
+        } else if (deltaY == 0) {
+            if (deltaX > 0) {
+                possibleDirections.add(2); // South
+            } else if (deltaX < 0) {
+                possibleDirections.add(0); // North
+            }
+        }
+
+        // Prioritize directions that reduce Euclidean distance the most
         possibleDirections.sort((a, b) -> {
-            int distanceA = Math.abs((myX + dx[a]) - CENTER) + Math.abs((myY + dy[a]) - CENTER);
-            int distanceB = Math.abs((myX + dx[b]) - CENTER) + Math.abs((myY + dy[b]) - CENTER);
+            int newX_A = myX + dx[a];
+            int newY_A = myY + dy[a];
+            int distanceA = (newX_A - CENTER) * (newX_A - CENTER) + (newY_A - CENTER) * (newY_A - CENTER);
+
+            int newX_B = myX + dx[b];
+            int newY_B = myY + dy[b];
+            int distanceB = (newX_B - CENTER) * (newX_B - CENTER) + (newY_B - CENTER) * (newY_B - CENTER);
+
             return Integer.compare(distanceA, distanceB);
         });
 
         // Try each possible direction
         for (int desiredDirIndex : possibleDirections) {
-            String move = attemptMoveInDirection(field, myX, myY, dirIndex, desiredDirIndex);
+            String move = attemptMoveInDirection(field, myX, myY, dirIndex, desiredDirIndex, minBound, maxBound);
             if (move != null) {
                 return move;
             }
@@ -220,12 +274,12 @@ public class SpaceshipAI {
         return null;
     }
 
-    private String attemptMoveInDirection(String[][] field, int myX, int myY, int dirIndex, int desiredDirIndex) {
+    private String attemptMoveInDirection(String[][] field, int myX, int myY, int dirIndex, int desiredDirIndex, int minBound, int maxBound) {
         int forwardX = myX + dx[desiredDirIndex];
         int forwardY = myY + dy[desiredDirIndex];
 
-        if (isOutOfBounds(forwardX, forwardY)) {
-            return null; // Can't move off the board
+        if (isOutOfBounds(forwardX, forwardY, minBound, maxBound)) {
+            return null; // Can't move off the board or outside safe area
         }
 
         if (isEmpty(field[forwardX][forwardY])) {
@@ -248,7 +302,7 @@ public class SpaceshipAI {
             return "L";
         } else if (diff == 2) {
             // Turn around
-            return "R";
+            return "R"; // Prefer rotating right for 180 degrees
         } else {
             return null; // Already facing the desired direction
         }
@@ -261,19 +315,19 @@ public class SpaceshipAI {
         } else if (diff == 3) {
             return "L";
         } else if (diff == 2) {
-            // Turn around
+            // Do not turn around to face enemy behind
             return null;
         } else {
             return null; // Already facing the desired direction
         }
     }
 
-    private String tryMoveForward(String[][] field, int myX, int myY, int dirIndex) {
+    private String tryMoveForward(String[][] field, int myX, int myY, int dirIndex, int minBound, int maxBound) {
         int forwardX = myX + dx[dirIndex];
         int forwardY = myY + dy[dirIndex];
 
-        if (isOutOfBounds(forwardX, forwardY)) {
-            return null; // Can't move off the board
+        if (isOutOfBounds(forwardX, forwardY, minBound, maxBound)) {
+            return null; // Can't move off the board or outside safe area
         }
 
         if (isEmpty(field[forwardX][forwardY])) {
@@ -283,15 +337,15 @@ public class SpaceshipAI {
         }
     }
 
-    private String findRotationToMove(String[][] field, int myX, int myY, int currentDirIndex) {
+    private String findRotationToMove(String[][] field, int myX, int myY, int currentDirIndex, int minBound, int maxBound) {
         for (int i = 1; i <= 3; i++) {
             int newIndex = (currentDirIndex + i) % 4;
 
             int forwardX = myX + dx[newIndex];
             int forwardY = myY + dy[newIndex];
 
-            if (isOutOfBounds(forwardX, forwardY)) {
-                continue; // Can't move off the board
+            if (isOutOfBounds(forwardX, forwardY, minBound, maxBound)) {
+                continue; // Can't move off the board or outside safe area
             }
 
             if (isEmpty(field[forwardX][forwardY])) {
@@ -306,7 +360,6 @@ public class SpaceshipAI {
         }
         return null;
     }
-
 
     public static class GameStatus {
         String[][] field = new String[13][13];
