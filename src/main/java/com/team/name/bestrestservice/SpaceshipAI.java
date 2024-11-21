@@ -39,8 +39,8 @@ public class SpaceshipAI {
             String move = moveTowards(shipX, shipY, shipDirection, centerX, centerY, field);
             return move;
         } else {
-            // At the target cell, rotate and fire at predicted enemy positions
-            String move = rotateAndFireAtIncomingEnemy(shipX, shipY, shipDirection, field);
+            // At the center, rotate to match the nearest enemy's facing direction
+            String move = rotateToMatchNearestEnemy(shipX, shipY, shipDirection, field);
             return move;
         }
     }
@@ -133,102 +133,7 @@ public class SpaceshipAI {
         return cell == null || cell.equals("_") || cell.equals("C");
     }
 
-    private String rotateAndFireAtIncomingEnemy(int shipX, int shipY, char shipDirection, String[][] field) {
-        // Find all enemies
-        List<EnemyShip> enemies = new ArrayList<>();
-        for (int y = 0; y < 13; y++) {
-            for (int x = 0; x < 13; x++) {
-                String cell = field[y][x];
-                if (cell != null && cell.startsWith("E")) {
-                    char enemyDirection = cell.charAt(1);
-                    enemies.add(new EnemyShip(x, y, enemyDirection));
-                }
-            }
-        }
-
-        if (enemies.isEmpty()) {
-            // No enemies found, skip turn
-            return null;
-        }
-
-        // Include current position in predicted positions
-        for (EnemyShip enemy : enemies) {
-            enemy.predictPositions(field);
-        }
-
-        // Prioritize enemies moving towards us and entering our firing range
-        EnemyShip targetEnemy = null;
-        int minTurnsNeeded = Integer.MAX_VALUE;
-        char desiredDirection = shipDirection;
-
-        for (EnemyShip enemy : enemies) {
-            // Check if the enemy is moving towards us
-            if (enemy.isMovingTowards(shipX, shipY)) {
-                // Predict the position where the enemy will be within our firing range
-                for (PredictedPosition pos : enemy.predictedPositions) {
-                    char dirToPosition = calculateDesiredDirection(shipX, shipY, pos.x, pos.y);
-                    int turnsNeeded = calculateTurnsNeeded(shipDirection, dirToPosition);
-
-                    if (turnsNeeded < minTurnsNeeded) {
-                        minTurnsNeeded = turnsNeeded;
-                        desiredDirection = dirToPosition;
-                        targetEnemy = enemy;
-                    }
-                    break; // Found a valid position, no need to check further
-                }
-            }
-        }
-
-        if (targetEnemy != null) {
-            if (shipDirection != desiredDirection) {
-                // Rotate towards the predicted position
-                return rotateTowards(shipDirection, desiredDirection);
-            } else {
-                // Fire if the enemy is within firing range
-                return "F";
-            }
-        } else {
-            // No imminent threats, proceed with previous logic
-            return rotateAndFireAtNearestEnemy(shipX, shipY, shipDirection, field);
-        }
-    }
-
-    private boolean isPositionInFiringRange(int shipX, int shipY, char direction, int posX, int posY, String[][] field) {
-        int range = 4;
-        int dx = 0, dy = 0;
-
-        switch (direction) {
-            case 'N': dy = -1; break;
-            case 'S': dy = 1; break;
-            case 'E': dx = 1; break;
-            case 'W': dx = -1; break;
-        }
-
-        int currentX = shipX;
-        int currentY = shipY;
-        for (int i = 1; i <= range; i++) {
-            currentX += dx;
-            currentY += dy;
-
-            if (currentX < 0 || currentX >= 13 || currentY < 0 || currentY >= 13) {
-                break; // Out of bounds
-            }
-
-            String cell = field[currentY][currentX];
-
-            if (cell != null && cell.startsWith("A")) {
-                break; // Asteroid blocks the blast
-            }
-
-            if (currentX == posX && currentY == posY) {
-                return true; // Position is within firing range
-            }
-        }
-
-        return false;
-    }
-
-    private String rotateAndFireAtNearestEnemy(int shipX, int shipY, char shipDirection, String[][] field) {
+    private String rotateToMatchNearestEnemy(int shipX, int shipY, char shipDirection, String[][] field) {
         // Find the nearest enemy
         EnemyShip nearestEnemy = null;
         int minDistance = Integer.MAX_VALUE;
@@ -250,48 +155,14 @@ public class SpaceshipAI {
             return null;
         }
 
-        char desiredDirection = calculateDesiredDirection(shipX, shipY, nearestEnemy.x, nearestEnemy.y);
+        char desiredDirection = nearestEnemy.direction;
 
         if (shipDirection != desiredDirection) {
             return rotateTowards(shipDirection, desiredDirection);
         } else {
-            // Check if the enemy is within firing range
-            if (isEnemyInFiringRange(shipX, shipY, shipDirection, nearestEnemy, field)) {
-                return "F";
-            } else {
-                // Enemy not in range, skip turn
-                return null;
-            }
+            // Already facing the same direction, skip turn
+            return null;
         }
-    }
-
-    private boolean isEnemyInFiringRange(int shipX, int shipY, char direction, EnemyShip enemy, String[][] field) {
-        return isPositionInFiringRange(shipX, shipY, direction, enemy.x, enemy.y, field);
-    }
-
-    private char calculateDesiredDirection(int fromX, int fromY, int toX, int toY) {
-        int dx = toX - fromX;
-        int dy = toY - fromY;
-
-        if (dx == 0 && dy == 0) {
-            // Same position, arbitrary direction
-            return 'N';
-        } else if (Math.abs(dx) >= Math.abs(dy)) {
-            return dx > 0 ? 'E' : 'W';
-        } else {
-            return dy > 0 ? 'S' : 'N';
-        }
-    }
-
-    private int calculateTurnsNeeded(char currentDirection, char desiredDirection) {
-        String directions = "NESW";
-        int currentIndex = directions.indexOf(currentDirection);
-        int desiredIndex = directions.indexOf(desiredDirection);
-
-        int leftTurns = (currentIndex - desiredIndex + 4) % 4;
-        int rightTurns = (desiredIndex - currentIndex + 4) % 4;
-
-        return Math.min(leftTurns, rightTurns);
     }
 
     private String rotateTowards(char currentDirection, char desiredDirection) {
@@ -312,77 +183,11 @@ public class SpaceshipAI {
     class EnemyShip {
         int x, y;
         char direction;
-        List<PredictedPosition> predictedPositions;
 
         EnemyShip(int x, int y, char direction) {
             this.x = x;
             this.y = y;
             this.direction = direction;
-            this.predictedPositions = new ArrayList<>();
-        }
-
-        void predictPositions(String[][] field) {
-            // Include the current position
-            predictedPositions.add(new PredictedPosition(x, y, 0));
-
-            // Predict future positions
-            int dx = 0, dy = 0;
-            switch (direction) {
-                case 'N': dy = -1; break;
-                case 'S': dy = 1; break;
-                case 'E': dx = 1; break;
-                case 'W': dx = -1; break;
-            }
-
-            int currentX = x;
-            int currentY = y;
-            for (int i = 1; i <= 5; i++) { // Predict up to 5 steps ahead
-                currentX += dx;
-                currentY += dy;
-
-                if (currentX < 0 || currentX >= 13 || currentY < 0 || currentY >= 13) {
-                    break; // Out of bounds
-                }
-
-                String cell = field[currentY][currentX];
-
-                if (cell != null && cell.startsWith("A")) {
-                    break; // Asteroid blocks movement
-                }
-
-                predictedPositions.add(new PredictedPosition(currentX, currentY, i));
-            }
-        }
-
-        boolean isMovingTowards(int shipX, int shipY) {
-            // Determine if the enemy is moving towards our ship
-            int dx = 0, dy = 0;
-            switch (direction) {
-                case 'N': dy = -1; break;
-                case 'S': dy = 1; break;
-                case 'E': dx = 1; break;
-                case 'W': dx = -1; break;
-            }
-
-            int nextX = x + dx;
-            int nextY = y + dy;
-
-            // Check if next position is closer to our ship
-            int currentDistance = Math.abs(x - shipX) + Math.abs(y - shipY);
-            int nextDistance = Math.abs(nextX - shipX) + Math.abs(nextY - shipY);
-
-            return nextDistance < currentDistance;
-        }
-    }
-
-    class PredictedPosition {
-        int x, y;
-        int turnsAhead; // Number of turns ahead this position is predicted
-
-        PredictedPosition(int x, int y, int turnsAhead) {
-            this.x = x;
-            this.y = y;
-            this.turnsAhead = turnsAhead;
         }
     }
 
