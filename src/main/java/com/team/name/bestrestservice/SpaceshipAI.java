@@ -149,7 +149,7 @@ public class SpaceshipAI {
             return null;
         }
 
-        // Predict enemy positions
+        // Include current position in predicted positions
         for (EnemyShip enemy : enemies) {
             enemy.predictPositions(field);
         }
@@ -239,6 +239,7 @@ public class SpaceshipAI {
                 break; // Asteroid blocks the blast
             }
 
+            // Check if the enemy is at this position
             if (enemy.isAtPosition(currentX, currentY)) {
                 return true; // Enemy is in firing range
             }
@@ -265,7 +266,7 @@ public class SpaceshipAI {
         }
     }
 
-    // EnemyShip class with prediction logic
+    // EnemyShip class with updated prediction logic
     class EnemyShip {
         int x, y;
         char direction;
@@ -279,7 +280,10 @@ public class SpaceshipAI {
         }
 
         void predictPositions(String[][] field) {
-            // Predict positions for the next few turns
+            // Include the current position
+            predictedPositions.add(new PredictedPosition(x, y, 0));
+
+            // Predict future positions
             int dx = 0, dy = 0;
             switch (direction) {
                 case 'N': dy = -1; break;
@@ -290,7 +294,7 @@ public class SpaceshipAI {
 
             int currentX = x;
             int currentY = y;
-            for (int i = 0; i < 5; i++) { // Predict up to 5 steps ahead
+            for (int i = 1; i <= 5; i++) { // Predict up to 5 steps ahead
                 currentX += dx;
                 currentY += dy;
 
@@ -304,12 +308,22 @@ public class SpaceshipAI {
                     break; // Asteroid blocks movement
                 }
 
-                predictedPositions.add(new PredictedPosition(currentX, currentY));
+                predictedPositions.add(new PredictedPosition(currentX, currentY, i));
             }
         }
 
         boolean isAtPosition(int posX, int posY) {
             // Check if the enemy is at a predicted position
+            for (PredictedPosition pos : predictedPositions) {
+                if (pos.x == posX && pos.y == posY && pos.turnsAhead == 0) {
+                    return true; // Enemy is currently at this position
+                }
+            }
+            return false;
+        }
+
+        boolean willBeAtPosition(int posX, int posY) {
+            // Check if the enemy will be at a predicted future position
             for (PredictedPosition pos : predictedPositions) {
                 if (pos.x == posX && pos.y == posY) {
                     return true;
@@ -321,10 +335,12 @@ public class SpaceshipAI {
 
     class PredictedPosition {
         int x, y;
+        int turnsAhead; // Number of turns ahead this position is predicted
 
-        PredictedPosition(int x, int y) {
+        PredictedPosition(int x, int y, int turnsAhead) {
             this.x = x;
             this.y = y;
+            this.turnsAhead = turnsAhead;
         }
     }
 
