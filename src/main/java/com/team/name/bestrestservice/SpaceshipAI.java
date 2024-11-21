@@ -34,7 +34,7 @@ public class SpaceshipAI {
         int centerY = 6;
 
         if (shipX != centerX || shipY != centerY) {
-            // Move towards the center
+            // Move towards the center using pathfinding
             String move = moveTowards(shipX, shipY, shipDirection, centerX, centerY, field);
             return move;
         } else {
@@ -45,31 +45,95 @@ public class SpaceshipAI {
     }
 
     private String moveTowards(int shipX, int shipY, char shipDirection, int targetX, int targetY, String[][] field) {
-        int dx = targetX - shipX;
-        int dy = targetY - shipY;
+        // Use BFS to find the next step towards the target avoiding obstacles
+        int[][] directions = {{0, -1, 'N'}, {1, 0, 'E'}, {0, 1, 'S'}, {-1, 0, 'W'}};
+        boolean[][] visited = new boolean[13][13];
+        int[][] prevX = new int[13][13];
+        int[][] prevY = new int[13][13];
+        char[][] prevDirection = new char[13][13];
 
-        char desiredDirection;
+        Queue<int[]> queue = new LinkedList<>();
+        queue.add(new int[]{shipX, shipY});
+        visited[shipY][shipX] = true;
+        prevX[shipY][shipX] = -1;
+        prevY[shipY][shipX] = -1;
 
-        // Decide whether to move in X or Y direction
-        if (Math.abs(dx) > Math.abs(dy)) {
-            desiredDirection = dx > 0 ? 'E' : 'W';
-        } else {
-            desiredDirection = dy > 0 ? 'S' : 'N';
+        boolean found = false;
+        while (!queue.isEmpty()) {
+            int[] current = queue.poll();
+            int curX = current[0];
+            int curY = current[1];
+
+            if (curX == targetX && curY == targetY) {
+                found = true;
+                break;
+            }
+
+            for (int[] dir : directions) {
+                int newX = curX + dir[0];
+                int newY = curY + dir[1];
+                char dirChar = (char) dir[2];
+
+                if (isValidCell(newX, newY, field) && !visited[newY][newX]) {
+                    visited[newY][newX] = true;
+                    queue.add(new int[]{newX, newY});
+                    prevX[newY][newX] = curX;
+                    prevY[newY][newX] = curY;
+                    prevDirection[newY][newX] = dirChar;
+                }
+            }
         }
 
+        if (!found) {
+            // No path found, default to rotate to a random direction
+            return "L";
+        }
+
+        // Reconstruct path
+        List<int[]> path = new ArrayList<>();
+        int pathX = targetX;
+        int pathY = targetY;
+        while (prevX[pathY][pathX] != -1 && prevY[pathY][pathX] != -1) {
+            path.add(new int[]{pathX, pathY});
+            int tempX = prevX[pathY][pathX];
+            int tempY = prevY[pathY][pathX];
+            pathX = tempX;
+            pathY = tempY;
+        }
+        Collections.reverse(path);
+
+        if (path.isEmpty()) {
+            // Already at the target
+            return "M";
+        }
+
+        int nextX = path.get(0)[0];
+        int nextY = path.get(0)[1];
+        char desiredDirection = getDirection(shipX, shipY, nextX, nextY);
+
         if (shipDirection == desiredDirection) {
-            // Attempt to move forward if the next cell is empty or contains a coin
-            int[] nextPos = getNextPosition(shipX, shipY, shipDirection);
-            if (isCellFree(nextPos[0], nextPos[1], field)) {
-                return "M";
-            } else {
-                // Cannot move forward, try rotating
-                return "L";
-            }
+            // Attempt to move forward
+            return "M";
         } else {
             // Rotate towards the desired direction
             return rotateTowards(shipDirection, desiredDirection);
         }
+    }
+
+    private char getDirection(int fromX, int fromY, int toX, int toY) {
+        if (toX - fromX == 1) return 'E';
+        if (toX - fromX == -1) return 'W';
+        if (toY - fromY == 1) return 'S';
+        if (toY - fromY == -1) return 'N';
+        return 'N'; // Default
+    }
+
+    private boolean isValidCell(int x, int y, String[][] field) {
+        if (x < 0 || x >= 13 || y < 0 || y >= 13) {
+            return false;
+        }
+        String cell = field[y][x];
+        return cell == null || cell.equals("_") || cell.equals("C");
     }
 
     private String attackNearestEnemy(int shipX, int shipY, char shipDirection, String[][] field) {
@@ -105,7 +169,7 @@ public class SpaceshipAI {
         int dx = nearestEnemy.x - shipX;
         int dy = nearestEnemy.y - shipY;
 
-        char desiredDirection;
+        char desiredDirection = shipDirection; // Initialize with current direction
 
         if (dx == 0 && dy == 0) {
             // Same position (collision), default to move
@@ -115,8 +179,12 @@ public class SpaceshipAI {
         } else if (dy == 0) {
             desiredDirection = dx > 0 ? 'E' : 'W';
         } else {
-            // Enemy not in line, prefer vertical rotation
-            desiredDirection = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : (dy > 0 ? 'S' : 'N');
+            // Enemy not in line, prefer the closer axis
+            if (Math.abs(dx) > Math.abs(dy)) {
+                desiredDirection = dx > 0 ? 'E' : 'W';
+            } else {
+                desiredDirection = dy > 0 ? 'S' : 'N';
+            }
         }
 
         if (shipDirection == desiredDirection) {
@@ -124,8 +192,14 @@ public class SpaceshipAI {
             if (isEnemyInFiringRange(shipX, shipY, shipDirection, nearestEnemy, field)) {
                 return "F";
             } else {
-                // Wait or move
-                return "M";
+                // Move forward to get in range
+                int[] nextPos = getNextPosition(shipX, shipY, shipDirection);
+                if (isValidCell(nextPos[0], nextPos[1], field)) {
+                    return "M";
+                } else {
+                    // Cannot move forward, rotate to avoid obstacle
+                    return "L";
+                }
             }
         } else {
             // Rotate towards the enemy
@@ -176,7 +250,9 @@ public class SpaceshipAI {
         int leftTurns = (currentIndex - desiredIndex + 4) % 4;
         int rightTurns = (desiredIndex - currentIndex + 4) % 4;
 
-        if (leftTurns <= rightTurns) {
+        if (leftTurns == 0) {
+            return "M"; // Already facing the desired direction
+        } else if (leftTurns <= rightTurns) {
             return "L";
         } else {
             return "R";
@@ -191,14 +267,6 @@ public class SpaceshipAI {
             case 'W': return new int[]{x - 1, y};
             default: return new int[]{x, y};
         }
-    }
-
-    private boolean isCellFree(int x, int y, String[][] field) {
-        if (x < 0 || x >= 13 || y < 0 || y >= 13) {
-            return false; // Out of bounds
-        }
-        String cell = field[y][x];
-        return cell == null || cell.equals("_") || cell.equals("C");
     }
 
     class EnemyShip {
