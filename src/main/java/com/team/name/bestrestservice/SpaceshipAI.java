@@ -35,11 +35,11 @@ public class SpaceshipAI {
         int centerY = 6;
 
         if (shipX != centerX || shipY != centerY) {
-            // Move towards the center using pathfinding
+            // Move towards the center, but check for enemies in front
             String move = moveTowards(shipX, shipY, shipDirection, centerX, centerY, field);
             return move;
         } else {
-            // At the center, rotate to face the direction of the nearest enemy's movement and fire if possible
+            // At the center, rotate and fire at enemies as before
             String move = rotateAndFireAtEnemy(shipX, shipY, shipDirection, field);
             return move;
         }
@@ -108,13 +108,62 @@ public class SpaceshipAI {
         int nextY = path.get(0)[1];
         char desiredDirection = getDirection(shipX, shipY, nextX, nextY);
 
-        if (shipDirection == desiredDirection) {
-            // Attempt to move forward
-            return "M";
-        } else {
+        if (shipDirection != desiredDirection) {
             // Rotate towards the desired direction
             return rotateTowards(shipDirection, desiredDirection);
+        } else {
+            // Check if there is an enemy directly ahead within firing range
+            if (isEnemyInFiringRange(shipX, shipY, shipDirection, field)) {
+                return "F";
+            } else {
+                // Attempt to move forward
+                return "M";
+            }
         }
+    }
+
+    private boolean isEnemyInFiringRange(int shipX, int shipY, char direction, String[][] field) {
+        int range = 4;
+        int dx = 0, dy = 0;
+
+        switch (direction) {
+            case 'N':
+                dy = -1;
+                break;
+            case 'S':
+                dy = 1;
+                break;
+            case 'E':
+                dx = 1;
+                break;
+            case 'W':
+                dx = -1;
+                break;
+        }
+
+        int currentX = shipX;
+        int currentY = shipY;
+        for (int i = 1; i <= range; i++) {
+            currentX += dx;
+            currentY += dy;
+
+            if (currentX < 0 || currentX >= 13 || currentY < 0 || currentY >= 13) {
+                break; // Out of bounds
+            }
+
+            String cell = field[currentY][currentX];
+
+            if (cell != null) {
+                if (cell.startsWith("A")) {
+                    break; // Asteroid blocks the blast
+                }
+                if (cell.startsWith("E")) {
+                    return true; // Enemy is in firing range
+                }
+            }
+        }
+
+        return false;
     }
 
     private char getDirection(int fromX, int fromY, int toX, int toY) {
@@ -191,7 +240,7 @@ public class SpaceshipAI {
             return rotateTowards(shipDirection, desiredDirection);
         } else {
             // Check if the enemy is within firing range
-            if (isEnemyInFiringRange(shipX, shipY, shipDirection, nearestEnemy, field)) {
+            if (isSpecificEnemyInFiringRange(shipX, shipY, shipDirection, nearestEnemy, field)) {
                 // Fire at the enemy
                 return "F";
             } else {
@@ -201,7 +250,7 @@ public class SpaceshipAI {
         }
     }
 
-    private boolean isEnemyInFiringRange(int shipX, int shipY, char direction, EnemyShip enemy, String[][] field) {
+    private boolean isSpecificEnemyInFiringRange(int shipX, int shipY, char direction, EnemyShip enemy, String[][] field) {
         int range = 4;
         int dx = 0, dy = 0;
 
@@ -232,13 +281,13 @@ public class SpaceshipAI {
 
             String cell = field[currentY][currentX];
 
-            if (cell != null && cell.startsWith("A")) {
-                break; // Asteroid blocks the blast
-            }
-
-            // Check if the enemy is at this position
-            if (enemy.x == currentX && enemy.y == currentY) {
-                return true; // Enemy is in firing range
+            if (cell != null) {
+                if (cell.startsWith("A")) {
+                    break; // Asteroid blocks the blast
+                }
+                if (currentX == enemy.x && currentY == enemy.y) {
+                    return true; // Specific enemy is in firing range
+                }
             }
         }
 
