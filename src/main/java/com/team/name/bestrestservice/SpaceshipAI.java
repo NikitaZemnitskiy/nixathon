@@ -25,8 +25,8 @@ public class SpaceshipAI {
         }
 
         if (shipX == -1 || shipY == -1) {
-            // Ship not found, default to move
-            return "M";
+            // Ship not found, default to do nothing
+            return null;
         }
 
         // Coordinates of the center
@@ -50,7 +50,6 @@ public class SpaceshipAI {
         boolean[][] visited = new boolean[13][13];
         int[][] prevX = new int[13][13];
         int[][] prevY = new int[13][13];
-        char[][] prevDirection = new char[13][13];
 
         Queue<int[]> queue = new LinkedList<>();
         queue.add(new int[]{shipX, shipY});
@@ -100,7 +99,7 @@ public class SpaceshipAI {
 
         if (path.isEmpty()) {
             // Already at the target
-            return "M";
+            return null; // Skip turn
         }
 
         int nextX = path.get(0)[0];
@@ -146,8 +145,8 @@ public class SpaceshipAI {
         }
 
         if (enemies.isEmpty()) {
-            // No enemies found, default to rotate
-            return "L";
+            // No enemies found, skip turn
+            return null;
         }
 
         // Find the nearest enemy
@@ -162,28 +161,36 @@ public class SpaceshipAI {
         }
 
         // Determine the direction towards the nearest enemy
-        int dx = nearestEnemy.x - shipX;
-        int dy = nearestEnemy.y - shipY;
-
-        char desiredDirection;
-
-        if (Math.abs(dx) > Math.abs(dy)) {
-            desiredDirection = dx > 0 ? 'E' : 'W';
-        } else {
-            desiredDirection = dy > 0 ? 'S' : 'N';
-        }
+        char desiredDirection = calculateDesiredDirection(shipX, shipY, nearestEnemy.x, nearestEnemy.y);
 
         if (shipDirection == desiredDirection) {
             // Check if the enemy is within firing range
             if (isEnemyInFiringRange(shipX, shipY, shipDirection, nearestEnemy, field)) {
                 return "F";
             } else {
-                // Enemy not in range, continue rotating
-                return "L";
+                // Enemy is not in range or blocked, skip turn
+                return null;
             }
         } else {
             // Rotate towards the enemy
             return rotateTowards(shipDirection, desiredDirection);
+        }
+    }
+
+    private char calculateDesiredDirection(int shipX, int shipY, int enemyX, int enemyY) {
+        int dx = enemyX - shipX;
+        int dy = enemyY - shipY;
+
+        if (dx == 0 && dy == 0) {
+            // Same position, arbitrary direction
+            return 'N';
+        } else if (Math.abs(dx) > Math.abs(dy)) {
+            return dx > 0 ? 'E' : 'W';
+        } else if (Math.abs(dy) > Math.abs(dx)) {
+            return dy > 0 ? 'S' : 'N';
+        } else {
+            // Equidistant, prefer horizontal direction
+            return dx > 0 ? 'E' : 'W';
         }
     }
 
@@ -231,7 +238,8 @@ public class SpaceshipAI {
         int rightTurns = (desiredIndex - currentIndex + 4) % 4;
 
         if (leftTurns == 0) {
-            return "F"; // Already facing the desired direction, try firing
+            // Already facing the desired direction
+            return null; // Skip turn
         } else if (leftTurns <= rightTurns) {
             return "L";
         } else {
