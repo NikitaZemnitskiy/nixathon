@@ -149,23 +149,33 @@ public class SpaceshipAI {
             return null;
         }
 
-        // Find the nearest enemy
-        EnemyShip nearestEnemy = null;
-        int minDistance = Integer.MAX_VALUE;
+        // Predict enemy positions
         for (EnemyShip enemy : enemies) {
-            int distance = Math.abs(enemy.x - shipX) + Math.abs(enemy.y - shipY);
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestEnemy = enemy;
+            enemy.predictPositions(field);
+        }
+
+        // Find the best enemy to target
+        EnemyShip targetEnemy = null;
+        int minTurnsToFire = Integer.MAX_VALUE;
+        char desiredDirection = shipDirection;
+
+        for (EnemyShip enemy : enemies) {
+            // For each predicted position, calculate the direction and turns needed
+            for (PredictedPosition pos : enemy.predictedPositions) {
+                char dirToEnemy = calculateDesiredDirection(shipX, shipY, pos.x, pos.y);
+                int turnsNeeded = calculateTurnsNeeded(shipDirection, dirToEnemy);
+
+                if (turnsNeeded < minTurnsToFire) {
+                    minTurnsToFire = turnsNeeded;
+                    desiredDirection = dirToEnemy;
+                    targetEnemy = enemy;
+                }
             }
         }
 
-        // Determine the direction towards the nearest enemy
-        char desiredDirection = calculateDesiredDirection(shipX, shipY, nearestEnemy.x, nearestEnemy.y);
-
         if (shipDirection == desiredDirection) {
             // Check if the enemy is within firing range
-            if (isEnemyInFiringRange(shipX, shipY, shipDirection, nearestEnemy, field)) {
+            if (isEnemyInFiringRange(shipX, shipY, shipDirection, targetEnemy, field)) {
                 return "F";
             } else {
                 // Enemy is not in range or blocked, skip turn
@@ -177,6 +187,17 @@ public class SpaceshipAI {
         }
     }
 
+    private int calculateTurnsNeeded(char currentDirection, char desiredDirection) {
+        String directions = "NESW";
+        int currentIndex = directions.indexOf(currentDirection);
+        int desiredIndex = directions.indexOf(desiredDirection);
+
+        int leftTurns = (currentIndex - desiredIndex + 4) % 4;
+        int rightTurns = (desiredIndex - currentIndex + 4) % 4;
+
+        return Math.min(leftTurns, rightTurns);
+    }
+
     private char calculateDesiredDirection(int shipX, int shipY, int enemyX, int enemyY) {
         int dx = enemyX - shipX;
         int dy = enemyY - shipY;
@@ -184,13 +205,10 @@ public class SpaceshipAI {
         if (dx == 0 && dy == 0) {
             // Same position, arbitrary direction
             return 'N';
-        } else if (Math.abs(dx) > Math.abs(dy)) {
+        } else if (Math.abs(dx) >= Math.abs(dy)) {
             return dx > 0 ? 'E' : 'W';
-        } else if (Math.abs(dy) > Math.abs(dx)) {
-            return dy > 0 ? 'S' : 'N';
         } else {
-            // Equidistant, prefer horizontal direction
-            return dx > 0 ? 'E' : 'W';
+            return dy > 0 ? 'S' : 'N';
         }
     }
 
@@ -221,7 +239,7 @@ public class SpaceshipAI {
                 break; // Asteroid blocks the blast
             }
 
-            if (currentX == enemy.x && currentY == enemy.y) {
+            if (enemy.isAtPosition(currentX, currentY)) {
                 return true; // Enemy is in firing range
             }
         }
@@ -247,18 +265,70 @@ public class SpaceshipAI {
         }
     }
 
+    // EnemyShip class with prediction logic
     class EnemyShip {
         int x, y;
         char direction;
+        List<PredictedPosition> predictedPositions;
 
         EnemyShip(int x, int y, char direction) {
             this.x = x;
             this.y = y;
             this.direction = direction;
+            this.predictedPositions = new ArrayList<>();
+        }
+
+        void predictPositions(String[][] field) {
+            // Predict positions for the next few turns
+            int dx = 0, dy = 0;
+            switch (direction) {
+                case 'N': dy = -1; break;
+                case 'S': dy = 1; break;
+                case 'E': dx = 1; break;
+                case 'W': dx = -1; break;
+            }
+
+            int currentX = x;
+            int currentY = y;
+            for (int i = 0; i < 5; i++) { // Predict up to 5 steps ahead
+                currentX += dx;
+                currentY += dy;
+
+                if (currentX < 0 || currentX >= 13 || currentY < 0 || currentY >= 13) {
+                    break; // Out of bounds
+                }
+
+                String cell = field[currentY][currentX];
+
+                if (cell != null && cell.startsWith("A")) {
+                    break; // Asteroid blocks movement
+                }
+
+                predictedPositions.add(new PredictedPosition(currentX, currentY));
+            }
+        }
+
+        boolean isAtPosition(int posX, int posY) {
+            // Check if the enemy is at a predicted position
+            for (PredictedPosition pos : predictedPositions) {
+                if (pos.x == posX && pos.y == posY) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
-    // Include the GameStatus class here if needed
+    class PredictedPosition {
+        int x, y;
+
+        PredictedPosition(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    // GameStatus class remains the same
     public static class GameStatus {
         String[][] field = new String[13][13];
         int narrowingIn;
