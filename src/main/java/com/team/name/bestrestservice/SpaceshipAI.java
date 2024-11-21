@@ -1,3 +1,4 @@
+package com.team.name.bestrestservice;
 import java.util.*;
 
 public class SpaceshipAI {
