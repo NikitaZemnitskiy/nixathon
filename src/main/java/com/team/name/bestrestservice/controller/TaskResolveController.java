@@ -15,6 +15,12 @@ import java.util.Map;
 @RestController
 public class TaskResolveController {
 
+    @GetMapping(value = "/healthz", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, String>> checkHealth() {
+        return ResponseEntity.ok(Collections.singletonMap("status", "OK"));
+    }
+
+
     @PostMapping(value = "/move", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, String>> move(@RequestBody SpaceshipAI.GameStatus gameStatus) {
         SpaceshipAI spaceshipAI = new SpaceshipAI();
