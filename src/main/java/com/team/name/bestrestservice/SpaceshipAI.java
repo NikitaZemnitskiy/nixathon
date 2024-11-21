@@ -39,8 +39,8 @@ public class SpaceshipAI {
             String move = moveTowards(shipX, shipY, shipDirection, centerX, centerY, field);
             return move;
         } else {
-            // At the center, rotate to match the nearest enemy's facing direction
-            String move = rotateToMatchNearestEnemy(shipX, shipY, shipDirection, field);
+            // At the center, rotate to face the direction of the nearest enemy's movement
+            String move = rotateToFaceEnemyMovement(shipX, shipY, shipDirection, field);
             return move;
         }
     }
@@ -133,10 +133,11 @@ public class SpaceshipAI {
         return cell == null || cell.equals("_") || cell.equals("C");
     }
 
-    private String rotateToMatchNearestEnemy(int shipX, int shipY, char shipDirection, String[][] field) {
-        // Find the nearest enemy
+    private String rotateToFaceEnemyMovement(int shipX, int shipY, char shipDirection, String[][] field) {
+        // Find the nearest enemy ship
         EnemyShip nearestEnemy = null;
         int minDistance = Integer.MAX_VALUE;
+
         for (int y = 0; y < 13; y++) {
             for (int x = 0; x < 13; x++) {
                 String cell = field[y][x];
@@ -144,7 +145,8 @@ public class SpaceshipAI {
                     int distance = Math.abs(x - shipX) + Math.abs(y - shipY);
                     if (distance < minDistance) {
                         minDistance = distance;
-                        nearestEnemy = new EnemyShip(x, y, cell.charAt(1));
+                        char enemyDirection = cell.charAt(1);
+                        nearestEnemy = new EnemyShip(x, y, enemyDirection);
                     }
                 }
             }
@@ -155,13 +157,56 @@ public class SpaceshipAI {
             return null;
         }
 
-        char desiredDirection = nearestEnemy.direction;
+        // Calculate the enemy's next position based on their current direction
+        int enemyNextX = nearestEnemy.x;
+        int enemyNextY = nearestEnemy.y;
+
+        switch (nearestEnemy.direction) {
+            case 'N':
+                enemyNextY -= 1;
+                break;
+            case 'E':
+                enemyNextX += 1;
+                break;
+            case 'S':
+                enemyNextY += 1;
+                break;
+            case 'W':
+                enemyNextX -= 1;
+                break;
+        }
+
+        // Ensure the next position is within bounds
+        if (enemyNextX < 0 || enemyNextX >= 13 || enemyNextY < 0 || enemyNextY >= 13) {
+            // If out of bounds, use the enemy's current position
+            enemyNextX = nearestEnemy.x;
+            enemyNextY = nearestEnemy.y;
+        }
+
+        // Calculate the desired direction to face
+        char desiredDirection = calculateDesiredDirection(shipX, shipY, enemyNextX, enemyNextY);
 
         if (shipDirection != desiredDirection) {
             return rotateTowards(shipDirection, desiredDirection);
         } else {
-            // Already facing the same direction, skip turn
+            // Already facing the correct direction, skip turn
             return null;
+        }
+    }
+
+    private char calculateDesiredDirection(int fromX, int fromY, int toX, int toY) {
+        int dx = toX - fromX;
+        int dy = toY - fromY;
+
+        if (dx == 0 && dy == 0) {
+            // Same position, arbitrary direction
+            return 'N';
+        }
+
+        if (Math.abs(dx) >= Math.abs(dy)) {
+            return dx > 0 ? 'E' : 'W';
+        } else {
+            return dy > 0 ? 'S' : 'N';
         }
     }
 
