@@ -1,4 +1,3 @@
-package com.team.name.bestrestservice;
 import java.util.*;
 
 public class SpaceshipAI {
@@ -38,7 +37,7 @@ public class SpaceshipAI {
             String move = moveTowards(shipX, shipY, shipDirection, centerX, centerY, field);
             return move;
         } else {
-            // At the target cell, rotate and fire at nearest enemy
+            // At the target cell, rotate and fire at nearest enemy considering their facing direction
             String move = rotateAndFireAtNearestEnemy(shipX, shipY, shipDirection, field);
             return move;
         }
@@ -154,19 +153,24 @@ public class SpaceshipAI {
             enemy.predictPositions(field);
         }
 
-        // Find the best enemy to target
+        // Find the best enemy to target considering their facing direction
         EnemyShip targetEnemy = null;
         int minTurnsToFire = Integer.MAX_VALUE;
         char desiredDirection = shipDirection;
 
         for (EnemyShip enemy : enemies) {
+            // Calculate the threat level based on enemy's facing direction
+            int threatLevel = calculateThreatLevel(shipX, shipY, enemy);
+
             // For each predicted position, calculate the direction and turns needed
             for (PredictedPosition pos : enemy.predictedPositions) {
                 char dirToEnemy = calculateDesiredDirection(shipX, shipY, pos.x, pos.y);
                 int turnsNeeded = calculateTurnsNeeded(shipDirection, dirToEnemy);
 
-                if (turnsNeeded < minTurnsToFire) {
-                    minTurnsToFire = turnsNeeded;
+                int totalScore = threatLevel + turnsNeeded;
+
+                if (totalScore < minTurnsToFire) {
+                    minTurnsToFire = totalScore;
                     desiredDirection = dirToEnemy;
                     targetEnemy = enemy;
                 }
@@ -187,6 +191,20 @@ public class SpaceshipAI {
         }
     }
 
+    private int calculateThreatLevel(int shipX, int shipY, EnemyShip enemy) {
+        // Higher threat level if enemy is facing us
+        int dx = shipX - enemy.x;
+        int dy = shipY - enemy.y;
+
+        char directionToUs = calculateDesiredDirection(enemy.x, enemy.y, shipX, shipY);
+
+        if (enemy.direction == directionToUs) {
+            return 0; // Highest priority
+        } else {
+            return 1; // Lower priority
+        }
+    }
+
     private int calculateTurnsNeeded(char currentDirection, char desiredDirection) {
         String directions = "NESW";
         int currentIndex = directions.indexOf(currentDirection);
@@ -198,9 +216,9 @@ public class SpaceshipAI {
         return Math.min(leftTurns, rightTurns);
     }
 
-    private char calculateDesiredDirection(int shipX, int shipY, int enemyX, int enemyY) {
-        int dx = enemyX - shipX;
-        int dy = enemyY - shipY;
+    private char calculateDesiredDirection(int fromX, int fromY, int toX, int toY) {
+        int dx = toX - fromX;
+        int dy = toY - fromY;
 
         if (dx == 0 && dy == 0) {
             // Same position, arbitrary direction
@@ -317,16 +335,6 @@ public class SpaceshipAI {
             for (PredictedPosition pos : predictedPositions) {
                 if (pos.x == posX && pos.y == posY && pos.turnsAhead == 0) {
                     return true; // Enemy is currently at this position
-                }
-            }
-            return false;
-        }
-
-        boolean willBeAtPosition(int posX, int posY) {
-            // Check if the enemy will be at a predicted future position
-            for (PredictedPosition pos : predictedPositions) {
-                if (pos.x == posX && pos.y == posY) {
-                    return true;
                 }
             }
             return false;
