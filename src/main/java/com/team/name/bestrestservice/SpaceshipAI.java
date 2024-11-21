@@ -39,8 +39,8 @@ public class SpaceshipAI {
             String move = moveTowards(shipX, shipY, shipDirection, centerX, centerY, field);
             return move;
         } else {
-            // At the center, rotate to face the direction of the nearest enemy's movement
-            String move = rotateToFaceEnemyMovement(shipX, shipY, shipDirection, field);
+            // At the center, rotate to face the direction of the nearest enemy's movement and fire if possible
+            String move = rotateAndFireAtEnemy(shipX, shipY, shipDirection, field);
             return move;
         }
     }
@@ -133,7 +133,7 @@ public class SpaceshipAI {
         return cell == null || cell.equals("_") || cell.equals("C");
     }
 
-    private String rotateToFaceEnemyMovement(int shipX, int shipY, char shipDirection, String[][] field) {
+    private String rotateAndFireAtEnemy(int shipX, int shipY, char shipDirection, String[][] field) {
         // Find the nearest enemy ship
         EnemyShip nearestEnemy = null;
         int minDistance = Integer.MAX_VALUE;
@@ -187,11 +187,62 @@ public class SpaceshipAI {
         char desiredDirection = calculateDesiredDirection(shipX, shipY, enemyNextX, enemyNextY);
 
         if (shipDirection != desiredDirection) {
+            // Rotate towards the desired direction
             return rotateTowards(shipDirection, desiredDirection);
         } else {
-            // Already facing the correct direction, skip turn
-            return null;
+            // Check if the enemy is within firing range
+            if (isEnemyInFiringRange(shipX, shipY, shipDirection, nearestEnemy, field)) {
+                // Fire at the enemy
+                return "F";
+            } else {
+                // Enemy not in firing range, skip turn
+                return null;
+            }
         }
+    }
+
+    private boolean isEnemyInFiringRange(int shipX, int shipY, char direction, EnemyShip enemy, String[][] field) {
+        int range = 4;
+        int dx = 0, dy = 0;
+
+        switch (direction) {
+            case 'N':
+                dy = -1;
+                break;
+            case 'S':
+                dy = 1;
+                break;
+            case 'E':
+                dx = 1;
+                break;
+            case 'W':
+                dx = -1;
+                break;
+        }
+
+        int currentX = shipX;
+        int currentY = shipY;
+        for (int i = 1; i <= range; i++) {
+            currentX += dx;
+            currentY += dy;
+
+            if (currentX < 0 || currentX >= 13 || currentY < 0 || currentY >= 13) {
+                break; // Out of bounds
+            }
+
+            String cell = field[currentY][currentX];
+
+            if (cell != null && cell.startsWith("A")) {
+                break; // Asteroid blocks the blast
+            }
+
+            // Check if the enemy is at this position
+            if (enemy.x == currentX && enemy.y == currentY) {
+                return true; // Enemy is in firing range
+            }
+        }
+
+        return false;
     }
 
     private char calculateDesiredDirection(int fromX, int fromY, int toX, int toY) {
